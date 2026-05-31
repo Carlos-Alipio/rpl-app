@@ -2,14 +2,11 @@ import streamlit as st
 import pandas as pd
 from db_utils import get_rotas, get_aeroportos, save_rotas, save_aeroportos, adicionar_usuario, get_usuarios, remover_usuario
 
-# Configuração da página
-st.set_page_config(page_title="Configurações", page_icon="⚙️", layout="wide")
-
-# --- CADEADO DE SEGURANÇA ---
-if not st.session_state.get('autenticado', False):
-    st.warning("🔒 Acesso Negado. Por favor, faça o login na página principal.")
-    st.stop() 
-# ----------------------------
+# ==========================================
+# 1. CONFIGURAÇÃO BASE
+# ==========================================
+# (Pode remover o st.set_page_config se o st.navigation já o gerir no app.py, 
+# mas mantemos aqui para garantir que a página corre bem sozinha)
 
 # --- FUNÇÕES DE LIMPEZA E FORMATAÇÃO ---
 def formatar_hora(t):
@@ -26,6 +23,9 @@ def carregar_dados_memoria():
     # Carregar e limpar Rotas
     df_r = get_rotas()
     
+    # Prevenção: Garante que os nomes das colunas são texto
+    df_r.columns = df_r.columns.astype(str)
+    
     colunas_texto_r = ['DE', 'PARA', 'MACH', 'FL', 'ROTA', 'EET', 'TV']
     for col in colunas_texto_r:
         if col in df_r.columns:
@@ -38,6 +38,9 @@ def carregar_dados_memoria():
 
     # Carregar e limpar Aeroportos
     df_a = get_aeroportos()
+    
+    # Prevenção: Garante que os nomes das colunas são texto antes de procurar o lixo
+    df_a.columns = df_a.columns.astype(str)
     
     df_a = df_a.loc[:, ~df_a.columns.str.contains('^Unnamed')]
     if 'IATA.1' in df_a.columns:
@@ -60,16 +63,16 @@ if 'df_rotas' not in st.session_state or 'df_aeroportos' not in st.session_state
 st.header("⚙️ Painel de Configurações")
 st.markdown("Gestão avançada da base de dados. Use os filtros para visualizar a malha e **clique diretamente numa linha da tabela** para a editar.")
 
-#aba1, aba2 = st.tabs(["🛣️ Gestão de Rotas", "🏢 Códigos de Aeroportos"])
-aba1, aba2, aba3 = st.tabs(["🛣️ Gestão de Rotas", "🏢 Códigos de Aeroportos", "🔐 Utilizadores Autorizados"])
+aba1, aba2, aba3 = st.tabs(["🛣️ Gestão de Rotas", "🏢 Códigos de Aeroportos", "🔐 Utilizadores"])
 
 # ==========================================
 # ABA 1: ROTAS
 # ==========================================
 with aba1:
-    # --- 1. FORMULÁRIO DE CRIAÇÃO ---
-    st.subheader("1. Adicionar Nova Rota")
-    with st.expander("➕ Clique aqui para preencher os dados de uma nova rota", expanded=False):
+    col_add, col_import = st.columns(2)
+    
+    # --- 1.A FORMULÁRIO DE CRIAÇÃO INDIVIDUAL ---
+    with st.expander("➕ Adicionar Rota Manualmente", expanded=False):
         with st.form("form_add_rota", clear_on_submit=True):
             c1, c2, c3, c4, c5 = st.columns(5)
             n_de = c1.text_input("DE (Origem)*", max_chars=4, help="Ex: SBSP")
@@ -80,14 +83,13 @@ with aba1:
             
             n_rota = st.text_area("ROTA*", help="Insira a rota completa.", height=100)
             
-            # Ajuste de Layout: Horários juntos e Observações numa linha inteira em baixo
             c7, c8 = st.columns(2)
             n_h_inicio = c7.text_input("HORA INÍCIO (HH:MM)", max_chars=5)
             n_h_fim = c8.text_input("HORA FIM (HH:MM)", max_chars=5)
             
-            n_eet = st.text_area("OBSERVAÇÕES (PBN/EET/EQPT)", help="Insira informações de EET, PBN, etc.", height=100)
+            n_eet = st.text_area("OBSERVAÇÕES (PBN/EET/EQPT)", height=100)
             
-            if st.form_submit_button("✅ Guardar Nova Rota na BD", type="primary"):
+            if st.form_submit_button("✅ Guardar Nova Rota", type="primary"):
                 if not n_de or not n_para or not n_rota:
                     st.error("⚠️ Os campos DE, PARA e ROTA são obrigatórios.")
                 else:
@@ -98,11 +100,45 @@ with aba1:
                         "HORA INICIO": n_h_inicio.strip(), "HORA FIM": n_h_fim.strip(), "EET": n_eet.upper().strip()
                     }
                     novo_df = pd.DataFrame([nova_linha])
-                    
                     st.session_state.df_rotas = pd.concat([st.session_state.df_rotas, novo_df], ignore_index=True)
                     save_rotas(st.session_state.df_rotas) 
                     st.success("✅ Nova rota inserida com sucesso!")
                     st.rerun()
+
+    # --- 1.B IMPORTAÇÃO EM LOTE ---
+    with st.expander("📂 Importar Lote via Excel/CSV", expanded=False):
+        st.info("O ficheiro deve conter na primeira linha (cabeçalho) as colunas: **DE, PARA, ROTA**. Pode incluir opcionalmente: MACH, FL, TV, HORA INICIO, HORA FIM, EET.")
+        ficheiro_rotas = st.file_uploader("Arraste a planilha de Rotas", type=["xlsx", "xls", "csv"], key="upload_rotas")
+        
+        if ficheiro_rotas:
+            try:
+                if ficheiro_rotas.name.endswith('.csv'):
+                    df_import = pd.read_csv(ficheiro_rotas, dtype=str)
+                else:
+                    df_import = pd.read_excel(ficheiro_rotas, dtype=str)
+                
+                # Forçar cabeçalhos a maiúsculas para evitar erros de case-sensitive
+                df_import.columns = df_import.columns.str.upper().str.strip()
+                
+                if 'DE' not in df_import.columns or 'PARA' not in df_import.columns or 'ROTA' not in df_import.columns:
+                    st.error("⚠️ O ficheiro não tem as colunas obrigatórias 'DE', 'PARA' e 'ROTA'. Verifique os cabeçalhos.")
+                else:
+                    st.success(f"Ficheiro lido com sucesso! ({len(df_import)} linhas encontradas).")
+                    if st.button("🚀 Processar e Adicionar à Base de Dados", type="primary"):
+                        # Limpeza profunda
+                        for col in df_import.columns:
+                            df_import[col] = df_import[col].apply(lambda x: str(x).upper().strip() if pd.notnull(x) else "")
+                        
+                        st.session_state.df_rotas = pd.concat([st.session_state.df_rotas, df_import], ignore_index=True)
+                        
+                        # Remove duplicados exatos
+                        st.session_state.df_rotas = st.session_state.df_rotas.drop_duplicates(subset=['DE', 'PARA', 'ROTA'])
+                        
+                        save_rotas(st.session_state.df_rotas)
+                        st.success("✅ Malha importada e consolidada com sucesso!")
+                        st.rerun()
+            except Exception as e:
+                st.error(f"Erro ao processar ficheiro: {e}")
 
     st.divider()
 
@@ -123,7 +159,7 @@ with aba1:
     if filtro_rota: df_view = df_view[df_view['ROTA'].str.contains(filtro_rota, case=False, na=False)]
 
     if len(df_view) == 0:
-        st.warning("Nenhuma rota encontrada com estes filtros.")
+        st.warning("Nenhuma rota encontrada.")
     else:
         st.info("👆 **Dica:** Clique na caixa de seleção à esquerda de qualquer linha na tabela para a editar ou apagar.")
         
@@ -148,7 +184,7 @@ with aba1:
         linhas_clicadas = evento_selecao.selection.rows
         
         if not linhas_clicadas:
-            st.warning("Nenhuma rota selecionada. Por favor, clique numa linha na tabela acima.")
+            st.warning("Nenhuma rota selecionada. Clique numa linha acima.")
         else:
             pos_idx = linhas_clicadas[0]
             idx_real = df_view.index[pos_idx]
@@ -158,18 +194,17 @@ with aba1:
             
             with st.form("form_gestao_rota"):
                 c1, c2, c3, c4, c5 = st.columns(5)
-                e_de = c1.text_input("DE*", value=rota_atual['DE'], max_chars=4)
-                e_para = c2.text_input("PARA*", value=rota_atual['PARA'], max_chars=4)
-                e_mach = c3.text_input("MACH", value=rota_atual['MACH'])
-                e_fl = c4.text_input("FL", value=rota_atual['FL'], max_chars=3)
-                e_tv = c5.text_input("TV (HH:MM)", value=formatar_hora(rota_atual['TV']), max_chars=5)
+                e_de = c1.text_input("DE*", value=rota_atual.get('DE', ''), max_chars=4)
+                e_para = c2.text_input("PARA*", value=rota_atual.get('PARA', ''), max_chars=4)
+                e_mach = c3.text_input("MACH", value=rota_atual.get('MACH', ''))
+                e_fl = c4.text_input("FL", value=rota_atual.get('FL', ''), max_chars=3)
+                e_tv = c5.text_input("TV (HH:MM)", value=formatar_hora(rota_atual.get('TV', '')), max_chars=5)
                 
-                e_rota = st.text_area("ROTA*", value=rota_atual['ROTA'], height=100)
+                e_rota = st.text_area("ROTA*", value=rota_atual.get('ROTA', ''), height=100)
                 
-                # Ajuste de Layout: Horários juntos e Observações numa linha inteira em baixo
                 c7, c8 = st.columns(2)
-                e_h_inicio = c7.text_input("HORA INÍCIO (HH:MM)", value=rota_atual['HORA INICIO'], max_chars=5)
-                e_h_fim = c8.text_input("HORA FIM (HH:MM)", value=rota_atual['HORA FIM'], max_chars=5)
+                e_h_inicio = c7.text_input("HORA INÍCIO (HH:MM)", value=rota_atual.get('HORA INICIO', ''), max_chars=5)
+                e_h_fim = c8.text_input("HORA FIM (HH:MM)", value=rota_atual.get('HORA FIM', ''), max_chars=5)
                 
                 eet_atual = "" if pd.isna(rota_atual.get('EET')) else str(rota_atual.get('EET')).strip()
                 e_eet = st.text_area("OBSERVAÇÕES", value=eet_atual, height=100)
@@ -208,9 +243,8 @@ with aba1:
 # ABA 2: AEROPORTOS 
 # ==========================================
 with aba2:
-    # --- 1. FORMULÁRIO DE CRIAÇÃO ---
-    st.subheader("1. Adicionar Novo Aeroporto")
-    with st.expander("➕ Clique aqui para registar um novo aeroporto", expanded=False):
+    # --- 1.A FORMULÁRIO DE CRIAÇÃO ---
+    with st.expander("➕ Registar Aeroporto Manualmente", expanded=False):
         with st.form("form_add_aero", clear_on_submit=True):
             c1, c2, c3, c4 = st.columns([1, 1, 2, 1])
             n_iata = c1.text_input("IATA (3 Letras)*", max_chars=3, help="Ex: CGH")
@@ -218,7 +252,7 @@ with aba2:
             n_cidade = c3.text_input("CIDADE", help="Ex: São Paulo")
             n_estado = c4.text_input("ESTADO", max_chars=2, help="Ex: SP")
             
-            if st.form_submit_button("✅ Guardar Novo Aeroporto na BD", type="primary"):
+            if st.form_submit_button("✅ Guardar Novo Aeroporto", type="primary"):
                 if not n_iata or not n_icao:
                     st.error("⚠️ Os campos IATA e ICAO são obrigatórios.")
                 else:
@@ -229,17 +263,46 @@ with aba2:
                         "ESTADO": n_estado.upper().strip()
                     }
                     novo_df = pd.DataFrame([nova_linha])
-                    
                     st.session_state.df_aeroportos = pd.concat([st.session_state.df_aeroportos, novo_df], ignore_index=True)
                     save_aeroportos(st.session_state.df_aeroportos) 
                     st.success("✅ Novo aeroporto registado com sucesso!")
                     st.rerun()
 
+    # --- 1.B IMPORTAÇÃO EM LOTE ---
+    with st.expander("📂 Importar Lote via Excel/CSV", expanded=False):
+        st.info("O ficheiro deve conter os cabeçalhos: **IATA, ICAO**. Pode incluir opcionalmente: CIDADE, ESTADO.")
+        ficheiro_aero = st.file_uploader("Arraste a planilha de Aeroportos", type=["xlsx", "xls", "csv"], key="upload_aero")
+        
+        if ficheiro_aero:
+            try:
+                if ficheiro_aero.name.endswith('.csv'):
+                    df_import_a = pd.read_csv(ficheiro_aero, dtype=str)
+                else:
+                    df_import_a = pd.read_excel(ficheiro_aero, dtype=str)
+                
+                df_import_a.columns = df_import_a.columns.str.upper().str.strip()
+                
+                if 'IATA' not in df_import_a.columns or 'ICAO' not in df_import_a.columns:
+                    st.error("⚠️ O ficheiro não tem as colunas obrigatórias 'IATA' e 'ICAO'.")
+                else:
+                    st.success(f"Ficheiro lido com sucesso! ({len(df_import_a)} linhas).")
+                    if st.button("🚀 Processar e Adicionar Códigos", type="primary"):
+                        for col in df_import_a.columns:
+                            df_import_a[col] = df_import_a[col].apply(lambda x: str(x).upper().strip() if pd.notnull(x) else "")
+                        
+                        st.session_state.df_aeroportos = pd.concat([st.session_state.df_aeroportos, df_import_a], ignore_index=True)
+                        st.session_state.df_aeroportos = st.session_state.df_aeroportos.drop_duplicates(subset=['IATA', 'ICAO'])
+                        save_aeroportos(st.session_state.df_aeroportos)
+                        st.success("✅ Aeroportos importados com sucesso!")
+                        st.rerun()
+            except Exception as e:
+                st.error(f"Erro ao processar ficheiro: {e}")
+
     st.divider()
 
     # --- 2. FILTROS E VISUALIZAÇÃO INTERATIVA ---
     st.subheader("2. Pesquisar e Selecionar Aeroportos")
-    filtro_aero = st.text_input("🔍 Pesquisar por IATA, ICAO, Cidade ou Estado (Ex: JPA, SBJP ou Paraíba)")
+    filtro_aero = st.text_input("🔍 Pesquisar por IATA, ICAO, Cidade ou Estado")
     
     df_view_aero = st.session_state.df_aeroportos.copy()
     
@@ -255,7 +318,7 @@ with aba2:
     if len(df_view_aero) == 0:
         st.warning("Nenhum aeroporto encontrado.")
     else:
-        st.info("👆 **Dica:** Tal como nas rotas, clique numa linha da tabela para a editar.")
+        st.info("👆 **Dica:** Clique numa linha da tabela para a editar.")
         
         evento_selecao_aero = st.dataframe(
             df_view_aero, 
@@ -275,7 +338,7 @@ with aba2:
         linhas_clicadas_aero = evento_selecao_aero.selection.rows
         
         if not linhas_clicadas_aero:
-            st.warning("Nenhum aeroporto selecionado. Por favor, clique numa linha na tabela acima.")
+            st.warning("Nenhum aeroporto selecionado. Clique numa linha acima.")
         else:
             pos_idx_aero = linhas_clicadas_aero[0]
             idx_real_aero = df_view_aero.index[pos_idx_aero]
@@ -285,10 +348,10 @@ with aba2:
             
             with st.form("form_gestao_aero"):
                 c1, c2, c3, c4 = st.columns([1, 1, 2, 1])
-                e_iata = c1.text_input("IATA*", value=aero_atual['IATA'], max_chars=3)
-                e_icao = c2.text_input("ICAO*", value=aero_atual['ICAO'], max_chars=4)
-                e_cidade = c3.text_input("CIDADE", value=aero_atual['CIDADE'])
-                e_estado = c4.text_input("ESTADO", value=aero_atual['ESTADO'], max_chars=2)
+                e_iata = c1.text_input("IATA*", value=aero_atual.get('IATA', ''), max_chars=3)
+                e_icao = c2.text_input("ICAO*", value=aero_atual.get('ICAO', ''), max_chars=4)
+                e_cidade = c3.text_input("CIDADE", value=aero_atual.get('CIDADE', ''))
+                e_estado = c4.text_input("ESTADO", value=aero_atual.get('ESTADO', ''), max_chars=2)
                 
                 st.write("") 
                 col_btn_upd, col_btn_del = st.columns(2)
