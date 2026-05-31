@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from db_utils import get_rotas, get_aeroportos, save_rotas, save_aeroportos
+from db_utils import get_rotas, get_aeroportos, save_rotas, save_aeroportos, adicionar_usuario, get_usuarios, remover_usuario
 
 # Configuração da página
 st.set_page_config(page_title="Configurações", page_icon="⚙️", layout="wide")
@@ -60,7 +60,8 @@ if 'df_rotas' not in st.session_state or 'df_aeroportos' not in st.session_state
 st.header("⚙️ Painel de Configurações")
 st.markdown("Gestão avançada da base de dados. Use os filtros para visualizar a malha e **clique diretamente numa linha da tabela** para a editar.")
 
-aba1, aba2 = st.tabs(["🛣️ Gestão de Rotas", "🏢 Códigos de Aeroportos"])
+#aba1, aba2 = st.tabs(["🛣️ Gestão de Rotas", "🏢 Códigos de Aeroportos"])
+aba1, aba2, aba3 = st.tabs(["🛣️ Gestão de Rotas", "🏢 Códigos de Aeroportos", "🔐 Utilizadores Autorizados"])
 
 # ==========================================
 # ABA 1: ROTAS
@@ -313,3 +314,44 @@ with aba2:
                     save_aeroportos(st.session_state.df_aeroportos)
                     st.warning("🗑️ Aeroporto eliminado permanentemente da Base de Dados.")
                     st.rerun()
+
+# ==========================================
+# ABA 3: SEGURANÇA E UTILIZADORES
+# ==========================================
+with aba3:
+    st.subheader("Pré-Autorizar Novos Utilizadores")
+    st.info("Insira o e-mail do operador e defina uma senha provisória. No seu primeiro acesso, ele será obrigado a criar uma senha pessoal.")
+    
+    with st.form("form_novo_user", clear_on_submit=True):
+        c1, c2 = st.columns(2)
+        novo_email = c1.text_input("E-mail do Operador")
+        senha_provisoria = c2.text_input("Senha Provisória (Ex: mudar123)")
+        
+        if st.form_submit_button("Autorizar Acesso", type="primary"):
+            if novo_email and senha_provisoria:
+                if adicionar_usuario(novo_email, senha_provisoria):
+                    st.success(f"✅ O utilizador {novo_email} foi autorizado!")
+                    st.rerun()
+                else:
+                    st.error("⚠️ Este e-mail já existe na base de dados.")
+            else:
+                st.error("Preencha ambos os campos.")
+                
+    st.divider()
+    st.subheader("Utilizadores no Sistema")
+    
+    df_users = get_usuarios()
+    df_users['Status'] = df_users['precisa_trocar_senha'].apply(lambda x: "⏳ Pendente (Troca de senha obrigatória)" if x else "✅ Ativo")
+    
+    st.dataframe(df_users[['email', 'Status']], use_container_width=True, hide_index=True)
+    
+    st.markdown("### Remover Acesso")
+    email_remover = st.selectbox("Selecione o e-mail para revogar o acesso:", ["--- Selecione ---"] + df_users['email'].tolist())
+    if st.button("🚫 Revogar Acesso", type="primary"):
+        if email_remover != "--- Selecione ---":
+            if email_remover == st.session_state['email_usuario']:
+                st.error("Não pode remover o seu próprio acesso enquanto está logado!")
+            else:
+                remover_usuario(email_remover)
+                st.success(f"Acesso de {email_remover} revogado.")
+                st.rerun()
