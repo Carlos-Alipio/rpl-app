@@ -1,6 +1,9 @@
 import streamlit as st
 import time
-from db_utils import verificar_login, atualizar_senha
+from db_utils import verificar_login, atualizar_senha, init_db
+
+# Garante que a base de dados acorda e se auto-repara mal a nuvem liga!
+init_db()
 
 # ==========================================
 # 1. CONFIGURAÇÃO BASE E LOGÓTIPO

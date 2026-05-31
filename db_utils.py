@@ -35,25 +35,33 @@ import bcrypt
 # GESTÃO DE UTILIZADORES E SEGURANÇA
 # ==========================================
 def init_db():
-    """Cria a tabela de utilizadores e um admin padrão se não existir."""
+    """Cria a tabela de utilizadores e um admin padrão, corrigindo problemas de colunas se necessário."""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS usuarios (
-            email TEXT PRIMARY KEY,
-            senha_hash TEXT NOT NULL,
-            precisa_trocar_senha BOOLEAN NOT NULL CHECK (precisa_trocar_senha IN (0, 1))
-        )
-    ''')
-    conn.commit()
     
-    # Se a tabela estiver vazia, cria o primeiro Administrador de emergência
+    # 1. Verifica se a tabela existe E se tem a coluna nova 'precisa_trocar_senha'
+    try:
+        c.execute("SELECT precisa_trocar_senha FROM usuarios LIMIT 1")
+    except sqlite3.OperationalError:
+        # Se deu erro, a tabela não existe ou é a versão antiga do seu outro app. Vamos recriar do zero!
+        c.execute("DROP TABLE IF EXISTS usuarios")
+        c.execute('''
+            CREATE TABLE usuarios (
+                email TEXT PRIMARY KEY,
+                senha_hash TEXT NOT NULL,
+                precisa_trocar_senha BOOLEAN NOT NULL CHECK (precisa_trocar_senha IN (0, 1))
+            )
+        ''')
+        conn.commit()
+    
+    # 2. Se a tabela estiver vazia, cria o primeiro Administrador de emergência
     c.execute("SELECT COUNT(*) FROM usuarios")
     if c.fetchone()[0] == 0:
         senha_padrao = bcrypt.hashpw("glo2026".encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
         c.execute("INSERT INTO usuarios (email, senha_hash, precisa_trocar_senha) VALUES (?, ?, 1)",
                   ("admin@glo.com.br", senha_padrao))
         conn.commit()
+        
     conn.close()
 
 def verificar_login(email, senha):
