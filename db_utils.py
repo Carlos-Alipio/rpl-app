@@ -9,8 +9,6 @@ from sqlalchemy import text
 # O Streamlit gere a conexão automaticamente através do secrets.toml
 conn = st.connection("supabase", type="sql")
 
-#"postgresql://postgres.przrcgxtnnwidmlkwhpk:Vqa4Qp5tku2lYsgj@aws-0-us-west-2.pooler.supabase.com:6543/postgres"
-
 # ==========================================
 # GESTÃO DE ROTAS E AEROPORTOS (PANDAS + SQLALCHEMY)
 # ==========================================
