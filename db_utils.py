@@ -16,7 +16,7 @@ from sqlalchemy import text
 conn = st.connection(
     "supabase", 
     type="sql", 
-    url="postgresql://postgres.przrcgxtnnwidmlkwhpk:Vqa4Qp5tku2@aws-1-us-east-2.pooler.supabase.com:5432/postgres"
+    url="postgresql://postgres.przrcgxtnnwidmlkwhpk:Vqa4Qp5tku2@aws-1-us-east-2.pooler.supabase.com:6543/postgres"
 )
 
 #"postgresql://postgres.przrcgxtnnwidmlkwhpk:Vqa4Qp5tku2lYsgj@aws-0-us-west-2.pooler.supabase.com:6543/postgres"
