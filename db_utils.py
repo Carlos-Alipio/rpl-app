@@ -10,7 +10,7 @@ from sqlalchemy import text
 conn = st.connection(
     "supabase", 
     type="sql", 
-    url="postgresql://postgres.przrcgxtnnwidmlkwhpk:SUA_SENHA_AQUI@aws-1-us-east-2.pooler.supabase.com:6543/postgres"
+    url="postgresql://postgres.przrcgxtnnwidmlkwhpk:Vqa4Qp5tku2lYsgj@aws-1-us-east-2.pooler.supabase.com:6543/postgres"
 )
 
 # ==========================================
