@@ -4,13 +4,13 @@ import bcrypt
 from sqlalchemy import text
 
 # ==========================================
-# CONEXÃO COM O SUPABASE
+# CONEXÃO COM O SUPABASE (SEGURA)
 # ==========================================
-# Forçando a URL definitiva (com a porta 6543 do Supabase)
+# O Streamlit vai injetar a URL diretamente do cofre de Secrets da nuvem
 conn = st.connection(
     "supabase", 
     type="sql", 
-    url="postgresql://postgres.przrcgxtnnwidmlkwhpk:Vqa4Qp5tku2lYsgj@aws-1-us-east-2.pooler.supabase.com:6543/postgres"
+    url=st.secrets["SUPABASE_URL"]
 )
 
 # ==========================================
