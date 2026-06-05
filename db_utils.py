@@ -1,63 +1,60 @@
 import streamlit as st
 import pandas as pd
 import bcrypt
-from sqlalchemy import text
+from sqlalchemy import text, exc
+from typing import Tuple, Optional
 
 # ==========================================
-# CONEXÃO COM O SUPABASE (SEGURA)
+# CONEXÃO COM O SUPABASE (SEGURANÇA & CACHING)
 # ==========================================
-conn = st.connection(
-    "supabase", 
-    type="sql", 
-    url=st.secrets["SUPABASE_URL"]
-)
+try:
+    conn = st.connection("supabase", type="sql", url=st.secrets.get("SUPABASE_URL"))
+except Exception as e:
+    st.error(f"Erro crítico de configuração do banco de dados: {e}")
+    conn = None
 
 # ==========================================
-# GESTÃO DE ROTAS E AEROPORTOS (PANDAS + SQLALCHEMY)
+# GESTÃO DE ROTAS E AEROPORTOS
 # ==========================================
 
-def get_rotas():
-    """Recupera todas as rotas com tratamento de erro e feedback ao utilizador."""
+def get_rotas() -> pd.DataFrame:
+    if conn is None: return pd.DataFrame()
     try:
         df = conn.query("SELECT * FROM rotas", ttl=0)
         if df is None or df.empty:
-            st.warning("Aviso: A tabela de rotas está vazia no banco de dados.")
             return pd.DataFrame(columns=['DE', 'PARA', 'MACH', 'FL', 'ROTA', 'EET', 'TV', 'HORA INICIO', 'HORA FIM'])
         return df
-    except Exception as e:
-        st.error(f"Erro ao carregar rotas: {e}")
-        return pd.DataFrame(columns=['DE', 'PARA', 'MACH', 'FL', 'ROTA', 'EET', 'TV', 'HORA INICIO', 'HORA FIM'])
+    except exc.SQLAlchemyError:
+        return pd.DataFrame()
 
-def get_aeroportos():
-    """Recupera todos os aeroportos com tratamento de erro."""
+def get_aeroportos() -> pd.DataFrame:
+    if conn is None: return pd.DataFrame()
     try:
         df = conn.query("SELECT * FROM aeroportos", ttl=0)
         if df is None or df.empty:
-            st.warning("Aviso: A tabela de aeroportos está vazia.")
             return pd.DataFrame(columns=['IATA', 'ICAO', 'CIDADE', 'ESTADO'])
         return df
-    except Exception as e:
-        st.error(f"Erro ao carregar aeroportos: {e}")
-        return pd.DataFrame(columns=['IATA', 'ICAO', 'CIDADE', 'ESTADO'])
+    except exc.SQLAlchemyError:
+        return pd.DataFrame()
 
-def save_rotas(df):
-    """Guarda as rotas usando TRUNCATE para preservar o schema e índices."""
+def save_rotas(df: pd.DataFrame):
+    if conn is None: return
     try:
         with conn.session as s:
             s.execute(text("TRUNCATE TABLE rotas"))
             s.commit()
-        df.to_sql('rotas', con=conn.engine, if_exists='append', index=False)
+        df.to_sql('rotas', con=conn.engine, if_exists='append', index=False, method='multi', chunksize=1000)
         st.success("Rotas atualizadas com sucesso!")
     except Exception as e:
         st.error(f"Falha ao salvar rotas: {e}")
 
-def save_aeroportos(df):
-    """Guarda os aeroportos usando TRUNCATE para preservar o schema."""
+def save_aeroportos(df: pd.DataFrame):
+    if conn is None: return
     try:
         with conn.session as s:
             s.execute(text("TRUNCATE TABLE aeroportos"))
             s.commit()
-        df.to_sql('aeroportos', con=conn.engine, if_exists='append', index=False)
+        df.to_sql('aeroportos', con=conn.engine, if_exists='append', index=False, method='multi', chunksize=1000)
         st.success("Aeroportos atualizados com sucesso!")
     except Exception as e:
         st.error(f"Falha ao salvar aeroportos: {e}")
@@ -67,46 +64,31 @@ def save_aeroportos(df):
 # ==========================================
 
 def init_db():
-    """Inicializa o schema do banco de dados garantindo integridade dos tipos."""
-    with conn.session as s:
-        # 1. Tabela de Utilizadores (Corrigido: senha_hash)
-        s.execute(text('''
-            CREATE TABLE IF NOT EXISTS usuarios (
-                id SERIAL PRIMARY KEY,
-                email TEXT UNIQUE NOT NULL,
-                senha_hash TEXT NOT NULL,
-                precisa_trocar_senha BOOLEAN DEFAULT TRUE
-            )
-        '''))
-        
-        # 2. Tabela de Aeroportos
-        s.execute(text('''
-            CREATE TABLE IF NOT EXISTS aeroportos (
-                "IATA" TEXT,
-                "ICAO" TEXT,
-                "CIDADE" TEXT,
-                "ESTADO" TEXT
-            )
-        '''))
+    if conn is None: return
+    try:
+        with conn.session as s:
+            s.execute(text('''
+                CREATE TABLE IF NOT EXISTS usuarios (
+                    id SERIAL PRIMARY KEY,
+                    email TEXT UNIQUE NOT NULL,
+                    senha_hash TEXT NOT NULL,
+                    precisa_trocar_senha BOOLEAN DEFAULT TRUE
+                )
+            '''))
+            s.execute(text('CREATE TABLE IF NOT EXISTS aeroportos ("IATA" TEXT, "ICAO" TEXT, "CIDADE" TEXT, "ESTADO" TEXT)'))
+            s.execute(text('''
+                CREATE TABLE IF NOT EXISTS rotas (
+                    "DE" TEXT, "PARA" TEXT, "MACH" TEXT, "FL" TEXT, 
+                    "ROTA" TEXT, "EET" TEXT, "TV" TEXT, 
+                    "HORA INICIO" TEXT, "HORA FIM" TEXT
+                )
+            '''))
+            s.commit()
+    except exc.SQLAlchemyError:
+        pass
 
-        # 3. Tabela de Rotas
-        s.execute(text('''
-            CREATE TABLE IF NOT EXISTS rotas (
-                "DE" TEXT,
-                "PARA" TEXT,
-                "MACH" TEXT,
-                "FL" TEXT,
-                "ROTA" TEXT,
-                "EET" TEXT,
-                "TV" TEXT,
-                "HORA INICIO" TEXT,
-                "HORA FIM" TEXT
-            )
-        '''))
-        s.commit()
-
-def verificar_login(email, senha):
-    """Verifica credenciais com hashing seguro."""
+def verificar_login(email: str, senha: str) -> Tuple[bool, bool]:
+    if conn is None: return False, False
     try:
         with conn.session as s:
             query = text("SELECT senha_hash, precisa_trocar_senha FROM usuarios WHERE email = :email")
@@ -116,12 +98,11 @@ def verificar_login(email, senha):
             senha_hash, precisa_trocar = result
             if bcrypt.checkpw(senha.encode('utf-8'), senha_hash.encode('utf-8')):
                 return True, precisa_trocar
-    except Exception as e:
-        st.error(f"Erro na autenticação: {e}")
+    except Exception:
+        pass
     return False, False
 
-def atualizar_senha(email, nova_senha):
-    """Atualiza a senha do utilizador e remove flag de troca obrigatória."""
+def atualizar_senha(email: str, nova_senha: str) -> bool:
     novo_hash = bcrypt.hashpw(nova_senha.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
     try:
         with conn.session as s:
@@ -130,12 +111,10 @@ def atualizar_senha(email, nova_senha):
             ), {"hash": novo_hash, "email": email.lower().strip()})
             s.commit()
         return True
-    except Exception as e:
-        st.error(f"Erro ao atualizar senha: {e}")
+    except Exception:
         return False
 
-def adicionar_usuario(email, senha_provisoria):
-    """Cria novo utilizador com senha temporária."""
+def adicionar_usuario(email: str, senha_provisoria: str) -> bool:
     hash_senha = bcrypt.hashpw(senha_provisoria.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
     try:
         with conn.session as s:
@@ -145,26 +124,22 @@ def adicionar_usuario(email, senha_provisoria):
             s.commit()
         return True
     except Exception:
-        return False # Provavelmente e-mail duplicado
+        return False
 
-def get_usuarios():
-    """Lista utilizadores para o painel administrativo."""
+def get_usuarios() -> pd.DataFrame:
+    if conn is None: return pd.DataFrame()
     try:
         return conn.query("SELECT email, precisa_trocar_senha FROM usuarios", ttl=0)
-    except Exception as e:
-        st.error(f"Erro ao listar utilizadores: {e}")
+    except Exception:
         return pd.DataFrame(columns=['email', 'precisa_trocar_senha'])
 
-def remover_usuario(email):
-    """Remove utilizador do sistema."""
+def remover_usuario(email: str) -> bool:
     try:
         with conn.session as s:
             s.execute(text("DELETE FROM usuarios WHERE email = :email"), {"email": email.lower().strip()})
             s.commit()
         return True
-    except Exception as e:
-        st.error(f"Erro ao remover utilizador: {e}")
+    except Exception:
         return False
 
-# Inicializa as tabelas no arranque do módulo
 init_db()
