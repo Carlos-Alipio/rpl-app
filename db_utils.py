@@ -103,6 +103,7 @@ def verificar_login(email: str, senha: str) -> Tuple[bool, bool]:
     return False, False
 
 def atualizar_senha(email: str, nova_senha: str) -> bool:
+    if conn is None: return False
     novo_hash = bcrypt.hashpw(nova_senha.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
     try:
         with conn.session as s:
@@ -115,6 +116,7 @@ def atualizar_senha(email: str, nova_senha: str) -> bool:
         return False
 
 def adicionar_usuario(email: str, senha_provisoria: str) -> bool:
+    if conn is None: return False
     hash_senha = bcrypt.hashpw(senha_provisoria.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
     try:
         with conn.session as s:
@@ -134,6 +136,7 @@ def get_usuarios() -> pd.DataFrame:
         return pd.DataFrame(columns=['email', 'precisa_trocar_senha'])
 
 def remover_usuario(email: str) -> bool:
+    if conn is None: return False
     try:
         with conn.session as s:
             s.execute(text("DELETE FROM usuarios WHERE email = :email"), {"email": email.lower().strip()})
