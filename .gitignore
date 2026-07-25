@@ -222,3 +222,7 @@ venv/
 __pycache__/
 *.csv
 .streamlit/
+
+
+RPL_Final.txt
+RPL_Dados_Consolidados.csv
