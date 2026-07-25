@@ -9,6 +9,10 @@ from db_utils import get_rotas, get_aeroportos, save_rotas, save_aeroportos, adi
 # mas mantemos aqui para garantir que a página corre bem sozinha)
 
 # --- FUNÇÕES DE LIMPEZA E FORMATAÇÃO ---
+def limpar_texto(v) -> str:
+    """Converte valores nulos/NaN vindos da BD em string vazia."""
+    return "" if pd.isna(v) else str(v)
+
 def formatar_hora(t):
     """Garante que a hora lida da BD fica no formato HH:MM"""
     if pd.isna(t) or str(t).strip().lower() in ['nan', 'none', '']: return ""
@@ -181,7 +185,7 @@ with aba1:
         # --- 3. EDITOR DA ROTA SELECIONADA ---
         st.subheader("3. Gerir Rota Selecionada")
         
-        linhas_clicadas = evento_selecao.selection.rows
+        linhas_clicadas = evento_selecao.get("selection", {}).get("rows", [])
         
         if not linhas_clicadas:
             st.warning("Nenhuma rota selecionada. Clique numa linha acima.")
@@ -194,19 +198,19 @@ with aba1:
             
             with st.form("form_gestao_rota"):
                 c1, c2, c3, c4, c5 = st.columns(5)
-                e_de = c1.text_input("DE*", value=rota_atual.get('DE', ''), max_chars=4)
-                e_para = c2.text_input("PARA*", value=rota_atual.get('PARA', ''), max_chars=4)
-                e_mach = c3.text_input("MACH", value=rota_atual.get('MACH', ''))
-                e_fl = c4.text_input("FL", value=rota_atual.get('FL', ''), max_chars=3)
+                e_de = c1.text_input("DE*", value=limpar_texto(rota_atual.get('DE')), max_chars=4)
+                e_para = c2.text_input("PARA*", value=limpar_texto(rota_atual.get('PARA')), max_chars=4)
+                e_mach = c3.text_input("MACH", value=limpar_texto(rota_atual.get('MACH')))
+                e_fl = c4.text_input("FL", value=limpar_texto(rota_atual.get('FL')), max_chars=3)
                 e_tv = c5.text_input("TV (HH:MM)", value=formatar_hora(rota_atual.get('TV', '')), max_chars=5)
-                
-                e_rota = st.text_area("ROTA*", value=rota_atual.get('ROTA', ''), height=100)
-                
+
+                e_rota = st.text_area("ROTA*", value=limpar_texto(rota_atual.get('ROTA')), height=100)
+
                 c7, c8 = st.columns(2)
-                e_h_inicio = c7.text_input("HORA INÍCIO (HH:MM)", value=rota_atual.get('HORA INICIO', ''), max_chars=5)
-                e_h_fim = c8.text_input("HORA FIM (HH:MM)", value=rota_atual.get('HORA FIM', ''), max_chars=5)
-                
-                eet_atual = "" if pd.isna(rota_atual.get('EET')) else str(rota_atual.get('EET')).strip()
+                e_h_inicio = c7.text_input("HORA INÍCIO (HH:MM)", value=limpar_texto(rota_atual.get('HORA INICIO')), max_chars=5)
+                e_h_fim = c8.text_input("HORA FIM (HH:MM)", value=limpar_texto(rota_atual.get('HORA FIM')), max_chars=5)
+
+                eet_atual = limpar_texto(rota_atual.get('EET')).strip()
                 e_eet = st.text_area("OBSERVAÇÕES", value=eet_atual, height=100)
                 
                 st.write("") 
@@ -335,7 +339,7 @@ with aba2:
         # --- 3. EDITOR DO AEROPORTO SELECIONADO ---
         st.subheader("3. Gerir Aeroporto Selecionado")
         
-        linhas_clicadas_aero = evento_selecao_aero.selection.rows
+        linhas_clicadas_aero = evento_selecao_aero.get("selection", {}).get("rows", [])
         
         if not linhas_clicadas_aero:
             st.warning("Nenhum aeroporto selecionado. Clique numa linha acima.")
@@ -348,10 +352,10 @@ with aba2:
             
             with st.form("form_gestao_aero"):
                 c1, c2, c3, c4 = st.columns([1, 1, 2, 1])
-                e_iata = c1.text_input("IATA*", value=aero_atual.get('IATA', ''), max_chars=3)
-                e_icao = c2.text_input("ICAO*", value=aero_atual.get('ICAO', ''), max_chars=4)
-                e_cidade = c3.text_input("CIDADE", value=aero_atual.get('CIDADE', ''))
-                e_estado = c4.text_input("ESTADO", value=aero_atual.get('ESTADO', ''), max_chars=2)
+                e_iata = c1.text_input("IATA*", value=limpar_texto(aero_atual.get('IATA')), max_chars=3)
+                e_icao = c2.text_input("ICAO*", value=limpar_texto(aero_atual.get('ICAO')), max_chars=4)
+                e_cidade = c3.text_input("CIDADE", value=limpar_texto(aero_atual.get('CIDADE')))
+                e_estado = c4.text_input("ESTADO", value=limpar_texto(aero_atual.get('ESTADO')), max_chars=2)
                 
                 st.write("") 
                 col_btn_upd, col_btn_del = st.columns(2)
