@@ -1,6 +1,12 @@
 import streamlit as st
 import pandas as pd
-from db_utils import get_rotas, get_aeroportos, save_rotas, save_aeroportos, adicionar_usuario, get_usuarios, remover_usuario
+from db_utils import (
+    get_rotas, get_aeroportos, save_rotas, save_aeroportos, adicionar_usuario, get_usuarios, remover_usuario,
+    get_config_textos, salvar_config_texto,
+    get_equipamentos, adicionar_equipamento, remover_equipamento,
+    get_prefixos_br, adicionar_prefixo_br, remover_prefixo_br,
+    get_aerodromos_excluidos, adicionar_aerodromo_excluido, remover_aerodromo_excluido,
+)
 
 # ==========================================
 # 1. CONFIGURAÇÃO BASE
@@ -67,7 +73,7 @@ if 'df_rotas' not in st.session_state or 'df_aeroportos' not in st.session_state
 st.header("⚙️ Painel de Configurações")
 st.markdown("Gestão avançada da base de dados. Use os filtros para visualizar a malha e **clique diretamente numa linha da tabela** para a editar.")
 
-aba1, aba2, aba3 = st.tabs(["🛣️ Gestão de Rotas", "🏢 Códigos de Aeroportos", "🔐 Utilizadores"])
+aba1, aba2, aba3, aba4 = st.tabs(["🛣️ Gestão de Rotas", "🏢 Códigos de Aeroportos", "🔐 Utilizadores", "🛠️ Sistema"])
 
 # ==========================================
 # ABA 1: ROTAS
@@ -421,4 +427,118 @@ with aba3:
             else:
                 remover_usuario(email_remover)
                 st.success(f"Acesso de {email_remover} revogado.")
+                st.rerun()
+
+# ==========================================
+# ABA 4: SISTEMA (PARÂMETROS DO GERADOR DE RPL)
+# ==========================================
+with aba4:
+    st.info("Estes parâmetros afetam diretamente a geração dos ficheiros RPL. Alterações entram em vigor na próxima geração.")
+
+    # --- 4.A TEXTOS PADRÃO ---
+    st.subheader("📝 Textos Padrão")
+    st.caption("Usados quando um voo não corresponde a nenhuma rota cadastrada.")
+
+    cfg = get_config_textos()
+    with st.form("form_textos_padrao"):
+        t_rmk1 = st.text_input("RMK 1 Padrão", value=cfg.get('DEFAULT_RMK_1', ''))
+        t_rmk2 = st.text_input("RMK 2 Padrão", value=cfg.get('DEFAULT_RMK_2', ''))
+        t_rota = st.text_input("Rota Padrão", value=cfg.get('DEFAULT_ROUTE', ''))
+
+        if st.form_submit_button("💾 Salvar Textos Padrão", type="primary"):
+            salvar_config_texto('DEFAULT_RMK_1', t_rmk1.strip())
+            salvar_config_texto('DEFAULT_RMK_2', t_rmk2.strip())
+            salvar_config_texto('DEFAULT_ROUTE', t_rota.strip())
+            st.success("✅ Textos padrão atualizados!")
+            st.rerun()
+
+    st.divider()
+
+    # --- 4.B MAPEAMENTO DE EQUIPAMENTOS ---
+    st.subheader("✈️ Mapeamento de Equipamentos")
+    st.caption("Converte o código de equipamento do ficheiro de voos (ex: 73G) no tipo usado no RPL (ex: B737/M).")
+
+    df_equip = get_equipamentos()
+    st.dataframe(df_equip, use_container_width=True, hide_index=True)
+
+    c_eq1, c_eq2 = st.columns(2)
+    with c_eq1:
+        with st.form("form_add_equip", clear_on_submit=True):
+            st.markdown("**➕ Adicionar / Atualizar**")
+            eq_codigo = st.text_input("Código (ex: 73G)", max_chars=10)
+            eq_tipo = st.text_input("Tipo RPL (ex: B737/M)", max_chars=15)
+            if st.form_submit_button("Guardar", type="primary"):
+                if eq_codigo and eq_tipo:
+                    adicionar_equipamento(eq_codigo, eq_tipo)
+                    st.success(f"✅ {eq_codigo.upper()} → {eq_tipo.upper()} guardado!")
+                    st.rerun()
+                else:
+                    st.error("Preencha ambos os campos.")
+    with c_eq2:
+        st.markdown("**🗑️ Remover**")
+        eq_remover = st.selectbox("Código a remover", ["--- Selecione ---"] + df_equip['CODIGO'].tolist(), key="sel_remover_equip")
+        if st.button("Remover Equipamento", type="secondary"):
+            if eq_remover != "--- Selecione ---":
+                remover_equipamento(eq_remover)
+                st.success(f"Equipamento {eq_remover} removido.")
+                st.rerun()
+
+    st.divider()
+
+    # --- 4.C PREFIXOS BRASIL ---
+    st.subheader("🇧🇷 Prefixos ICAO Considerados Brasil")
+    st.caption("Só são gerados voos cujo aeródromo de origem e destino comecem com um destes prefixos.")
+
+    df_prefixos = get_prefixos_br()
+    st.dataframe(df_prefixos, use_container_width=True, hide_index=True)
+
+    c_pf1, c_pf2 = st.columns(2)
+    with c_pf1:
+        with st.form("form_add_prefixo", clear_on_submit=True):
+            st.markdown("**➕ Adicionar**")
+            novo_prefixo = st.text_input("Prefixo (2 letras, ex: SB)", max_chars=2)
+            if st.form_submit_button("Guardar", type="primary"):
+                if novo_prefixo:
+                    adicionar_prefixo_br(novo_prefixo)
+                    st.success(f"✅ Prefixo {novo_prefixo.upper()} adicionado!")
+                    st.rerun()
+                else:
+                    st.error("Preencha o prefixo.")
+    with c_pf2:
+        st.markdown("**🗑️ Remover**")
+        prefixo_remover = st.selectbox("Prefixo a remover", ["--- Selecione ---"] + df_prefixos['PREFIXO'].tolist(), key="sel_remover_prefixo")
+        if st.button("Remover Prefixo", type="secondary"):
+            if prefixo_remover != "--- Selecione ---":
+                remover_prefixo_br(prefixo_remover)
+                st.success(f"Prefixo {prefixo_remover} removido.")
+                st.rerun()
+
+    st.divider()
+
+    # --- 4.D AERÓDROMOS EXCLUÍDOS ---
+    st.subheader("🚫 Aeródromos Excluídos")
+    st.caption("Voos com origem ou destino nestes aeródromos nunca são incluídos no RPL, mesmo que atendam aos prefixos acima.")
+
+    df_excluidos = get_aerodromos_excluidos()
+    st.dataframe(df_excluidos, use_container_width=True, hide_index=True)
+
+    c_ex1, c_ex2 = st.columns(2)
+    with c_ex1:
+        with st.form("form_add_excluido", clear_on_submit=True):
+            st.markdown("**➕ Adicionar**")
+            novo_excluido = st.text_input("Código ICAO (ex: SBJP)", max_chars=4)
+            if st.form_submit_button("Guardar", type="primary"):
+                if novo_excluido:
+                    adicionar_aerodromo_excluido(novo_excluido)
+                    st.success(f"✅ Aeródromo {novo_excluido.upper()} excluído do RPL!")
+                    st.rerun()
+                else:
+                    st.error("Preencha o código ICAO.")
+    with c_ex2:
+        st.markdown("**🗑️ Remover da exclusão**")
+        excluido_remover = st.selectbox("Código a remover", ["--- Selecione ---"] + df_excluidos['ICAO'].tolist(), key="sel_remover_excluido")
+        if st.button("Remover da Lista", type="secondary"):
+            if excluido_remover != "--- Selecione ---":
+                remover_aerodromo_excluido(excluido_remover)
+                st.success(f"Aeródromo {excluido_remover} voltará a ser incluído no RPL.")
                 st.rerun()

@@ -7,11 +7,19 @@ import re
 
 # ==========================================
 # CONSTANTES E CONFIGURAÇÕES
+# (usadas como valores de reserva caso a BD esteja vazia/inacessível;
+#  o valor real e editável fica nas tabelas config_textos/equipamentos/
+#  prefixos_br/aerodromos_excluidos, geridas na aba "Sistema")
 # ==========================================
 DEFAULT_RMK_1 = "EQPT/SDFGIKRWY/LB1 STS/ATFMX"
 DEFAULT_RMK_2 = "PBN/B1C1D1O1S2T1 EET/SBCW0003"
 DEFAULT_ROUTE = "N0000 000 ROUTE UNKNOWN"
 PREFIXOS_BR = ('SB', 'SD', 'SI', 'SJ', 'SN', 'SS', 'SW')
+AERODROMOS_EXCLUIDOS = ('SBJP',)
+DEFAULT_EQUIPMENT_MAP = {
+    "73G": "B737/M", "73M": "B738/M", "73X": "B738/M", "738": "B738/M",
+    "73A": "B738/M", "7M8": "B38M/M", "7ME": "B38M/M"
+}
 
 # ==========================================
 # FUNÇÕES AUXILIARES
@@ -21,9 +29,9 @@ def parse_time_to_int(t_str):
     s = str(t_str).replace(':', '').strip()
     return int(s) if s.isdigit() and s != '' else None
 
-def parse_rmk(rmk_raw):
+def parse_rmk(rmk_raw, rmk1=DEFAULT_RMK_1, rmk2=DEFAULT_RMK_2):
     if pd.isna(rmk_raw) or str(rmk_raw).strip().lower() in ['nan', 'none', '', '<na>']:
-        return DEFAULT_RMK_1, DEFAULT_RMK_2
+        return rmk1, rmk2
     rmk_str = str(rmk_raw).strip()
     for tag in ['PBN/', 'EET/']:
         if tag in rmk_str:
@@ -31,12 +39,9 @@ def parse_rmk(rmk_raw):
             return rmk_str[:idx].strip(), rmk_str[idx:].strip()
     return rmk_str, ""
 
-def map_equipment(eq):
-    mapping = {
-        "73G": "B737/M", "73M": "B738/M", "73X": "B738/M", "738": "B738/M", 
-        "73A": "B738/M", "7M8": "B38M/M", "7ME": "B38M/M"
-    }
-    return mapping.get(str(eq).strip().upper(), "B738/M") 
+def map_equipment(eq, mapping=None):
+    mapping = mapping or DEFAULT_EQUIPMENT_MAP
+    return mapping.get(str(eq).strip().upper(), "B738/M")
 
 def gerar_cabecalho(data_ref, pagina_atual):
     meses = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
@@ -72,10 +77,28 @@ def safe_float_to_int_str(val, zfill_len=0):
 # ==========================================
 def gerar_ficheiros_rpl(caminho_csv_voos, data_inicio_str, data_fim_str):
     try:
-        from db_utils import get_aeroportos, get_rotas
+        from db_utils import (
+            get_aeroportos, get_rotas, get_config_textos,
+            get_equipamentos, get_prefixos_br, get_aerodromos_excluidos
+        )
         df_iata_icao, df_rotas = get_aeroportos(), get_rotas()
         if df_iata_icao.empty or df_rotas.empty: raise ValueError("Base de dados vazia.")
         iata_icao = dict(zip(df_iata_icao['IATA'], df_iata_icao['ICAO']))
+
+        # Configurações internas editáveis (aba "Sistema"), com reserva para o caso de a BD vir vazia
+        cfg_textos = get_config_textos()
+        rmk1 = cfg_textos.get('DEFAULT_RMK_1', DEFAULT_RMK_1)
+        rmk2 = cfg_textos.get('DEFAULT_RMK_2', DEFAULT_RMK_2)
+        rota_padrao = cfg_textos.get('DEFAULT_ROUTE', DEFAULT_ROUTE)
+
+        df_equip = get_equipamentos()
+        equip_map = dict(zip(df_equip['CODIGO'], df_equip['TIPO'])) if not df_equip.empty else DEFAULT_EQUIPMENT_MAP
+
+        df_prefixos = get_prefixos_br()
+        prefixos_br = tuple(df_prefixos['PREFIXO']) if not df_prefixos.empty else PREFIXOS_BR
+
+        df_excluidos = get_aerodromos_excluidos()
+        aerodromos_excluidos = tuple(df_excluidos['ICAO']) if not df_excluidos.empty else AERODROMOS_EXCLUIDOS
     except Exception as e:
         st.error(f"Erro BD: {e}")
         return None, None
@@ -97,8 +120,10 @@ def gerar_ficheiros_rpl(caminho_csv_voos, data_inicio_str, data_fim_str):
         route_data = {
             'route': f"{mach} {fl_val} {str(row.get('ROTA', 'ROUTE UNKNOWN')).strip()}",
             'tv': tv_str,
-            'obs1': parse_rmk(row.get('EET'))[0], 'obs2': parse_rmk(row.get('EET'))[1],
-            'start': parse_time_to_int(row.get('HORA INICIO')), 'end': parse_time_to_int(row.get('HORA FIM'))
+            'obs1': parse_rmk(row.get('EET'), rmk1, rmk2)[0], 'obs2': parse_rmk(row.get('EET'), rmk1, rmk2)[1],
+            'start': parse_time_to_int(row.get('HORA INICIO')), 'end': parse_time_to_int(row.get('HORA FIM')),
+            # Campos "puros" (sem concatenação), usados apenas na exportação CSV no padrão MODELO_PADRAO.csv
+            'mach': mach.strip(), 'fl': fl_val, 'rota_pura': str(row.get('ROTA', 'ROUTE UNKNOWN')).strip()
         }
         key = (origem, destino)
         if key not in routes_map: routes_map[key] = {'default': None, 'timed': []}
@@ -120,11 +145,11 @@ def gerar_ficheiros_rpl(caminho_csv_voos, data_inicio_str, data_fim_str):
 
     df['ADEP'] = df['Dept Sta'].map(iata_icao).fillna(df['Dept Sta'])
     df['ADES'] = df['Arvl Sta'].map(iata_icao).fillna(df['Arvl Sta'])
-    df = df[df['ADEP'].str.startswith(PREFIXOS_BR, na=False) & df['ADES'].str.startswith(PREFIXOS_BR, na=False) & (~df['ADEP'].isin(['SBJP'])) & (~df['ADES'].isin(['SBJP']))].copy()
-    
+    df = df[df['ADEP'].str.startswith(prefixos_br, na=False) & df['ADES'].str.startswith(prefixos_br, na=False) & (~df['ADEP'].isin(aerodromos_excluidos)) & (~df['ADES'].isin(aerodromos_excluidos))].copy()
+
     if df.empty: return None, None
 
-    df['Equip_Map'] = df['Equip'].apply(map_equipment)
+    df['Equip_Map'] = df['Equip'].apply(lambda x: map_equipment(x, equip_map))
     df['EOBT'] = df['Dept Time'].astype(str).str.replace(':', '').str.zfill(4)
     
     # Robustez: Conversão de Flt Num tratando strings vazias ou nulas
@@ -138,13 +163,17 @@ def gerar_ficheiros_rpl(caminho_csv_voos, data_inicio_str, data_fim_str):
     rpl_lines.extend(gerar_cabecalho(d_ini, cur_page))
 
     def resolve(dep, arr, eobt):
+        fallback = {
+            'route': rota_padrao, 'tv': "0000", 'obs1': rmk1, 'obs2': rmk2,
+            'mach': 'N0000', 'fl': '000', 'rota_pura': rota_padrao
+        }
         res = routes_map.get((dep, arr))
-        if not res: return {'route': DEFAULT_ROUTE, 'tv': "0000", 'obs1': DEFAULT_RMK_1, 'obs2': DEFAULT_RMK_2}
+        if not res: return fallback
         t_val = parse_time_to_int(eobt)
         for tr in res['timed']:
             s, e = tr['start'], tr['end']
             if (s <= e and s <= t_val <= e) or (s > e and (t_val >= s or t_val <= e)): return tr
-        return res['default'] or {'route': DEFAULT_ROUTE, 'tv': "0000", 'obs1': DEFAULT_RMK_1, 'obs2': DEFAULT_RMK_2}
+        return res['default'] or fallback
 
     for _, group in df.groupby('Block_ID'):
         if flt_page >= LIMIT:
@@ -168,9 +197,19 @@ def gerar_ficheiros_rpl(caminho_csv_voos, data_inicio_str, data_fim_str):
             rc, oc = r_chunks[i] if i < len(r_chunks) else "", o_chunks[i-1] if (i-1) < len(o_chunks) else ""
             if rc or oc: rpl_lines.append(f"{' ' * 59}{rc:<45}{oc}")
         flt_page += 1
-        csv_records.append({**base.to_dict(), **rt, 'VALID_FROM': v_from, 'VALID_TO': v_to})
+
+        # Linha no padrão MODELO_PADRAO.csv (23 colunas, sem cabeçalho, separador ';')
+        tipo_ac, _, cat_esteira = base['Equip_Map'].partition('/')
+        dias_mask = get_group_mask(group['Weekday'])
+        obs_csv = f"{rt['obs1']} {rt['obs2']}".strip()
+        csv_records.append([
+            "+", v_from, v_to, *dias_mask,
+            base['Flt_Id'], tipo_ac, cat_esteira,
+            base['ADEP'], base['EOBT'], rt['mach'], f"F{rt['fl']}", rt['rota_pura'],
+            base['ADES'], rt['tv'], obs_csv, "", ""
+        ])
 
     txt_out, csv_out = "RPL_Final.txt", "RPL_Dados_Consolidados.csv"
     with open(txt_out, 'w', encoding='utf-8') as f: f.write('\n'.join(rpl_lines) + '\n')
-    pd.DataFrame(csv_records).to_csv(csv_out, index=False, sep=';')
+    pd.DataFrame(csv_records).to_csv(csv_out, index=False, header=False, sep=';')
     return txt_out, csv_out
