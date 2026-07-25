@@ -48,16 +48,29 @@ def save_rotas(df: pd.DataFrame):
     except Exception as e:
         st.error(f"Falha ao salvar rotas: {e}")
 
-def save_aeroportos(df: pd.DataFrame):
-    if conn is None: return
+def adicionar_aeroporto(iata: str, icao: str) -> bool:
+    """Adiciona um código IATA/ICAO; se o IATA já existir, atualiza o ICAO."""
+    if conn is None: return False
     try:
         with conn.session as s:
-            s.execute(text("TRUNCATE TABLE aeroportos"))
+            iata_v, icao_v = iata.upper().strip(), icao.upper().strip()
+            s.execute(text('DELETE FROM aeroportos WHERE "IATA" = :iata'), {"iata": iata_v})
+            s.execute(text('INSERT INTO aeroportos ("IATA", "ICAO") VALUES (:iata, :icao)'),
+                       {"iata": iata_v, "icao": icao_v})
             s.commit()
-        df.to_sql('aeroportos', con=conn.engine, if_exists='append', index=False, method='multi', chunksize=1000)
-        st.success("Aeroportos atualizados com sucesso!")
-    except Exception as e:
-        st.error(f"Falha ao salvar aeroportos: {e}")
+        return True
+    except Exception:
+        return False
+
+def remover_aeroporto(iata: str) -> bool:
+    if conn is None: return False
+    try:
+        with conn.session as s:
+            s.execute(text('DELETE FROM aeroportos WHERE "IATA" = :iata'), {"iata": iata})
+            s.commit()
+        return True
+    except Exception:
+        return False
 
 # ==========================================
 # GESTÃO DE UTILIZADORES E SEGURANÇA

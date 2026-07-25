@@ -1,8 +1,8 @@
 import streamlit as st
 import pandas as pd
 from db_utils import (
-    get_rotas, get_aeroportos, save_rotas, save_aeroportos, adicionar_usuario, get_usuarios, remover_usuario,
-    get_config_textos, salvar_config_texto,
+    get_rotas, save_rotas, adicionar_usuario, get_usuarios, remover_usuario,
+    get_aeroportos, adicionar_aeroporto, remover_aeroporto,
     get_equipamentos, adicionar_equipamento, remover_equipamento,
     get_prefixos_br, adicionar_prefixo_br, remover_prefixo_br,
     get_aerodromos_excluidos, adicionar_aerodromo_excluido, remover_aerodromo_excluido,
@@ -46,34 +46,18 @@ def carregar_dados_memoria():
     df_r = df_r.reset_index(drop=True)
     st.session_state.df_rotas = df_r
 
-    # Carregar e limpar Aeroportos
-    df_a = get_aeroportos()
-    
-    # Prevenção: Garante que os nomes das colunas são texto antes de procurar o lixo
-    df_a.columns = df_a.columns.astype(str)
-    
-    df_a = df_a.loc[:, ~df_a.columns.str.contains('^Unnamed')]
-    if 'IATA.1' in df_a.columns:
-        df_a = df_a.drop(columns=['IATA.1'])
-    
-    if 'CIDADE' not in df_a.columns: df_a['CIDADE'] = ""
-    if 'ESTADO' not in df_a.columns: df_a['ESTADO'] = ""
-        
-    colunas_texto_a = ['IATA', 'ICAO', 'CIDADE', 'ESTADO']
-    for col in colunas_texto_a:
-        if col in df_a.columns:
-            df_a[col] = df_a[col].apply(lambda x: str(x).upper().strip() if pd.notnull(x) else "")
-            
-    df_a = df_a.reset_index(drop=True) 
-    st.session_state.df_aeroportos = df_a
-
-if 'df_rotas' not in st.session_state or 'df_aeroportos' not in st.session_state:
+if 'df_rotas' not in st.session_state:
     carregar_dados_memoria()
 
-st.header("⚙️ Painel de Configurações")
+st.header(":material/settings: Painel de Configurações")
 st.markdown("Gestão avançada da base de dados. Use os filtros para visualizar a malha e **clique diretamente numa linha da tabela** para a editar.")
 
-aba1, aba2, aba3, aba4 = st.tabs(["🛣️ Gestão de Rotas", "🏢 Códigos de Aeroportos", "🔐 Utilizadores", "🛠️ Sistema"])
+aba1, aba2, aba3, aba4 = st.tabs([
+    ":material/route: Gestão de Rotas",
+    ":material/local_airport: Códigos de Aeroportos",
+    ":material/manage_accounts: Utilizadores",
+    ":material/build: Sistema",
+])
 
 # ==========================================
 # ABA 1: ROTAS
@@ -82,7 +66,7 @@ with aba1:
     col_add, col_import = st.columns(2)
     
     # --- 1.A FORMULÁRIO DE CRIAÇÃO INDIVIDUAL ---
-    with st.expander("➕ Adicionar Rota Manualmente", expanded=False):
+    with st.expander("Adicionar Rota Manualmente", icon=":material/add:", expanded=False):
         with st.form("form_add_rota", clear_on_submit=True):
             c1, c2, c3, c4, c5 = st.columns(5)
             n_de = c1.text_input("DE (Origem)*", max_chars=4, help="Ex: SBSP")
@@ -99,9 +83,9 @@ with aba1:
             
             n_eet = st.text_area("OBSERVAÇÕES (PBN/EET/EQPT)", height=100)
             
-            if st.form_submit_button("✅ Guardar Nova Rota", type="primary"):
+            if st.form_submit_button("Guardar Nova Rota", type="primary", icon=":material/check_circle:"):
                 if not n_de or not n_para or not n_rota:
-                    st.error("⚠️ Os campos DE, PARA e ROTA são obrigatórios.")
+                    st.error("Os campos DE, PARA e ROTA são obrigatórios.", icon=":material/warning:")
                 else:
                     nova_linha = {
                         "DE": n_de.upper().strip(), "PARA": n_para.upper().strip(), "MACH": n_mach.upper().strip(),
@@ -111,12 +95,12 @@ with aba1:
                     }
                     novo_df = pd.DataFrame([nova_linha])
                     st.session_state.df_rotas = pd.concat([st.session_state.df_rotas, novo_df], ignore_index=True)
-                    save_rotas(st.session_state.df_rotas) 
-                    st.success("✅ Nova rota inserida com sucesso!")
+                    save_rotas(st.session_state.df_rotas)
+                    st.success("Nova rota inserida com sucesso!", icon=":material/check_circle:")
                     st.rerun()
 
     # --- 1.B IMPORTAÇÃO EM LOTE ---
-    with st.expander("📂 Importar Lote via Excel/CSV", expanded=False):
+    with st.expander("Importar Lote via Excel/CSV", icon=":material/folder_open:", expanded=False):
         st.info("O ficheiro deve conter na primeira linha (cabeçalho) as colunas: **DE, PARA, ROTA**. Pode incluir opcionalmente: MACH, FL, TV, HORA INICIO, HORA FIM, EET.")
         ficheiro_rotas = st.file_uploader("Arraste a planilha de Rotas", type=["xlsx", "xls", "csv"], key="upload_rotas")
         
@@ -131,10 +115,10 @@ with aba1:
                 df_import.columns = df_import.columns.str.upper().str.strip()
                 
                 if 'DE' not in df_import.columns or 'PARA' not in df_import.columns or 'ROTA' not in df_import.columns:
-                    st.error("⚠️ O ficheiro não tem as colunas obrigatórias 'DE', 'PARA' e 'ROTA'. Verifique os cabeçalhos.")
+                    st.error("O ficheiro não tem as colunas obrigatórias 'DE', 'PARA' e 'ROTA'. Verifique os cabeçalhos.", icon=":material/warning:")
                 else:
                     st.success(f"Ficheiro lido com sucesso! ({len(df_import)} linhas encontradas).")
-                    if st.button("🚀 Processar e Adicionar à Base de Dados", type="primary"):
+                    if st.button("Processar e Adicionar à Base de Dados", type="primary", icon=":material/rocket_launch:"):
                         # Limpeza profunda
                         for col in df_import.columns:
                             df_import[col] = df_import[col].apply(lambda x: str(x).upper().strip() if pd.notnull(x) else "")
@@ -145,7 +129,7 @@ with aba1:
                         st.session_state.df_rotas = st.session_state.df_rotas.drop_duplicates(subset=['DE', 'PARA', 'ROTA'])
                         
                         save_rotas(st.session_state.df_rotas)
-                        st.success("✅ Malha importada e consolidada com sucesso!")
+                        st.success("Malha importada e consolidada com sucesso!", icon=":material/check_circle:")
                         st.rerun()
             except Exception as e:
                 st.error(f"Erro ao processar ficheiro: {e}")
@@ -159,9 +143,9 @@ with aba1:
     opcoes_de = sorted(st.session_state.df_rotas['DE'].dropna().astype(str).unique())
     opcoes_para = sorted(st.session_state.df_rotas['PARA'].dropna().astype(str).unique())
     
-    filtro_de = c_f1.multiselect("📍 Filtrar Origem (DE)", opcoes_de)
-    filtro_para = c_f2.multiselect("📍 Filtrar Destino (PARA)", opcoes_para)
-    filtro_rota = c_f3.text_input("🔍 Pesquisar trecho na ROTA")
+    filtro_de = c_f1.multiselect(":material/location_on: Filtrar Origem (DE)", opcoes_de)
+    filtro_para = c_f2.multiselect(":material/location_on: Filtrar Destino (PARA)", opcoes_para)
+    filtro_rota = c_f3.text_input("Pesquisar trecho na ROTA", icon=":material/search:")
 
     df_view = st.session_state.df_rotas.copy()
     if filtro_de: df_view = df_view[df_view['DE'].isin(filtro_de)]
@@ -171,7 +155,7 @@ with aba1:
     if len(df_view) == 0:
         st.warning("Nenhuma rota encontrada.")
     else:
-        st.info("👆 **Dica:** Clique na caixa de seleção à esquerda de qualquer linha na tabela para a editar ou apagar.")
+        st.info("**Dica:** Clique na caixa de seleção à esquerda de qualquer linha na tabela para a editar ou apagar.", icon=":material/touch_app:")
         
         df_display = df_view.copy()
         if 'TV' in df_display.columns:
@@ -200,7 +184,7 @@ with aba1:
             idx_real = df_view.index[pos_idx]
             rota_atual = st.session_state.df_rotas.loc[idx_real]
             
-            st.markdown(f"### A editar: `{rota_atual['DE']} ➡️ {rota_atual['PARA']}`")
+            st.markdown(f"### A editar: `{rota_atual['DE']}` :material/arrow_forward: `{rota_atual['PARA']}`")
             
             with st.form("form_gestao_rota"):
                 c1, c2, c3, c4, c5 = st.columns(5)
@@ -222,12 +206,12 @@ with aba1:
                 st.write("") 
                 col_btn_upd, col_btn_del = st.columns(2)
                 
-                btn_atualizar = col_btn_upd.form_submit_button("💾 Atualizar Dados", type="primary", use_container_width=True)
-                btn_apagar = col_btn_del.form_submit_button("🗑️ Apagar esta Rota", use_container_width=True)
-                
+                btn_atualizar = col_btn_upd.form_submit_button("Atualizar Dados", type="primary", use_container_width=True, icon=":material/save:")
+                btn_apagar = col_btn_del.form_submit_button("Apagar esta Rota", use_container_width=True, icon=":material/delete:")
+
                 if btn_atualizar:
                     if not e_de or not e_para or not e_rota:
-                        st.error("⚠️ Os campos DE, PARA e ROTA são obrigatórios.")
+                        st.error("Os campos DE, PARA e ROTA são obrigatórios.", icon=":material/warning:")
                     else:
                         st.session_state.df_rotas.loc[idx_real, 'DE'] = e_de.upper().strip()
                         st.session_state.df_rotas.loc[idx_real, 'PARA'] = e_para.upper().strip()
@@ -240,152 +224,47 @@ with aba1:
                         st.session_state.df_rotas.loc[idx_real, 'EET'] = e_eet.upper().strip()
                         
                         save_rotas(st.session_state.df_rotas)
-                        st.success("✅ Rota atualizada com sucesso na Base de Dados!")
+                        st.success("Rota atualizada com sucesso na Base de Dados!", icon=":material/check_circle:")
                         st.rerun()
-                        
+
                 elif btn_apagar:
                     st.session_state.df_rotas = st.session_state.df_rotas.drop(idx_real).reset_index(drop=True)
                     save_rotas(st.session_state.df_rotas)
-                    st.warning("🗑️ Rota eliminada permanentemente da Base de Dados.")
+                    st.warning("Rota eliminada permanentemente da Base de Dados.", icon=":material/delete:")
                     st.rerun()
 
 # ==========================================
-# ABA 2: AEROPORTOS 
+# ABA 2: AEROPORTOS
 # ==========================================
 with aba2:
-    # --- 1.A FORMULÁRIO DE CRIAÇÃO ---
-    with st.expander("➕ Registar Aeroporto Manualmente", expanded=False):
-        with st.form("form_add_aero", clear_on_submit=True):
-            c1, c2, c3, c4 = st.columns([1, 1, 2, 1])
-            n_iata = c1.text_input("IATA (3 Letras)*", max_chars=3, help="Ex: CGH")
-            n_icao = c2.text_input("ICAO (4 Letras)*", max_chars=4, help="Ex: SBSP")
-            n_cidade = c3.text_input("CIDADE", help="Ex: São Paulo")
-            n_estado = c4.text_input("ESTADO", max_chars=2, help="Ex: SP")
-            
-            if st.form_submit_button("✅ Guardar Novo Aeroporto", type="primary"):
-                if not n_iata or not n_icao:
-                    st.error("⚠️ Os campos IATA e ICAO são obrigatórios.")
-                else:
-                    nova_linha = {
-                        "IATA": n_iata.upper().strip(), 
-                        "ICAO": n_icao.upper().strip(),
-                        "CIDADE": n_cidade.upper().strip(),
-                        "ESTADO": n_estado.upper().strip()
-                    }
-                    novo_df = pd.DataFrame([nova_linha])
-                    st.session_state.df_aeroportos = pd.concat([st.session_state.df_aeroportos, novo_df], ignore_index=True)
-                    save_aeroportos(st.session_state.df_aeroportos) 
-                    st.success("✅ Novo aeroporto registado com sucesso!")
+    st.subheader(":material/local_airport: Códigos de Aeroportos")
+    st.caption("Converte o código IATA do ficheiro de voos (ex: CGH) no código ICAO usado no RPL (ex: SBSP).")
+
+    df_aero = get_aeroportos()
+    ALTURA_AERO = 280
+    c_ae1, c_ae2, c_ae3 = st.columns([2, 1, 1])
+    with c_ae1:
+        st.dataframe(df_aero, use_container_width=True, hide_index=True, height=ALTURA_AERO, column_order=['IATA', 'ICAO'])
+    with c_ae2:
+        with st.form("form_add_aero", clear_on_submit=True, height=ALTURA_AERO):
+            st.markdown(":material/add: **Adicionar**")
+            n_iata = st.text_input("IATA (ex: CGH)", max_chars=3)
+            n_icao = st.text_input("ICAO (ex: SBSP)", max_chars=4)
+            if st.form_submit_button("Guardar", type="primary", icon=":material/check_circle:"):
+                if n_iata and n_icao:
+                    adicionar_aeroporto(n_iata, n_icao)
+                    st.success(f"{n_iata.upper()} → {n_icao.upper()} guardado!", icon=":material/check_circle:")
                     st.rerun()
-
-    # --- 1.B IMPORTAÇÃO EM LOTE ---
-    with st.expander("📂 Importar Lote via Excel/CSV", expanded=False):
-        st.info("O ficheiro deve conter os cabeçalhos: **IATA, ICAO**. Pode incluir opcionalmente: CIDADE, ESTADO.")
-        ficheiro_aero = st.file_uploader("Arraste a planilha de Aeroportos", type=["xlsx", "xls", "csv"], key="upload_aero")
-        
-        if ficheiro_aero:
-            try:
-                if ficheiro_aero.name.endswith('.csv'):
-                    df_import_a = pd.read_csv(ficheiro_aero, dtype=str)
                 else:
-                    df_import_a = pd.read_excel(ficheiro_aero, dtype=str)
-                
-                df_import_a.columns = df_import_a.columns.str.upper().str.strip()
-                
-                if 'IATA' not in df_import_a.columns or 'ICAO' not in df_import_a.columns:
-                    st.error("⚠️ O ficheiro não tem as colunas obrigatórias 'IATA' e 'ICAO'.")
-                else:
-                    st.success(f"Ficheiro lido com sucesso! ({len(df_import_a)} linhas).")
-                    if st.button("🚀 Processar e Adicionar Códigos", type="primary"):
-                        for col in df_import_a.columns:
-                            df_import_a[col] = df_import_a[col].apply(lambda x: str(x).upper().strip() if pd.notnull(x) else "")
-                        
-                        st.session_state.df_aeroportos = pd.concat([st.session_state.df_aeroportos, df_import_a], ignore_index=True)
-                        st.session_state.df_aeroportos = st.session_state.df_aeroportos.drop_duplicates(subset=['IATA', 'ICAO'])
-                        save_aeroportos(st.session_state.df_aeroportos)
-                        st.success("✅ Aeroportos importados com sucesso!")
-                        st.rerun()
-            except Exception as e:
-                st.error(f"Erro ao processar ficheiro: {e}")
-
-    st.divider()
-
-    # --- 2. FILTROS E VISUALIZAÇÃO INTERATIVA ---
-    st.subheader("2. Pesquisar e Selecionar Aeroportos")
-    filtro_aero = st.text_input("🔍 Pesquisar por IATA, ICAO, Cidade ou Estado")
-    
-    df_view_aero = st.session_state.df_aeroportos.copy()
-    
-    if filtro_aero:
-        filtro_upper = filtro_aero.upper().strip()
-        df_view_aero = df_view_aero[
-            df_view_aero['IATA'].str.contains(filtro_upper, na=False) | 
-            df_view_aero['ICAO'].str.contains(filtro_upper, na=False) |
-            df_view_aero['CIDADE'].str.contains(filtro_upper, na=False) |
-            df_view_aero['ESTADO'].str.contains(filtro_upper, na=False)
-        ]
-
-    if len(df_view_aero) == 0:
-        st.warning("Nenhum aeroporto encontrado.")
-    else:
-        st.info("👆 **Dica:** Clique numa linha da tabela para a editar.")
-        
-        evento_selecao_aero = st.dataframe(
-            df_view_aero, 
-            use_container_width=True, 
-            hide_index=True, 
-            height=250,
-            on_select="rerun",           
-            selection_mode="single-row",
-            key="tabela_aeroportos_view" 
-        )
-        
-        st.divider()
-
-        # --- 3. EDITOR DO AEROPORTO SELECIONADO ---
-        st.subheader("3. Gerir Aeroporto Selecionado")
-        
-        linhas_clicadas_aero = evento_selecao_aero.get("selection", {}).get("rows", [])
-        
-        if not linhas_clicadas_aero:
-            st.warning("Nenhum aeroporto selecionado. Clique numa linha acima.")
-        else:
-            pos_idx_aero = linhas_clicadas_aero[0]
-            idx_real_aero = df_view_aero.index[pos_idx_aero]
-            aero_atual = st.session_state.df_aeroportos.loc[idx_real_aero]
-            
-            st.markdown(f"### A editar conversão: `{aero_atual['IATA']} ➡️ {aero_atual['ICAO']}`")
-            
-            with st.form("form_gestao_aero"):
-                c1, c2, c3, c4 = st.columns([1, 1, 2, 1])
-                e_iata = c1.text_input("IATA*", value=limpar_texto(aero_atual.get('IATA')), max_chars=3)
-                e_icao = c2.text_input("ICAO*", value=limpar_texto(aero_atual.get('ICAO')), max_chars=4)
-                e_cidade = c3.text_input("CIDADE", value=limpar_texto(aero_atual.get('CIDADE')))
-                e_estado = c4.text_input("ESTADO", value=limpar_texto(aero_atual.get('ESTADO')), max_chars=2)
-                
-                st.write("") 
-                col_btn_upd, col_btn_del = st.columns(2)
-                
-                btn_atualizar_aero = col_btn_upd.form_submit_button("💾 Atualizar Dados", type="primary", use_container_width=True)
-                btn_apagar_aero = col_btn_del.form_submit_button("🗑️ Apagar este Aeroporto", use_container_width=True)
-                
-                if btn_atualizar_aero:
-                    if not e_iata or not e_icao:
-                        st.error("⚠️ Os campos IATA e ICAO são obrigatórios.")
-                    else:
-                        st.session_state.df_aeroportos.loc[idx_real_aero, 'IATA'] = e_iata.upper().strip()
-                        st.session_state.df_aeroportos.loc[idx_real_aero, 'ICAO'] = e_icao.upper().strip()
-                        st.session_state.df_aeroportos.loc[idx_real_aero, 'CIDADE'] = e_cidade.upper().strip()
-                        st.session_state.df_aeroportos.loc[idx_real_aero, 'ESTADO'] = e_estado.upper().strip()
-                        
-                        save_aeroportos(st.session_state.df_aeroportos)
-                        st.success("✅ Aeroporto atualizado com sucesso na Base de Dados!")
-                        st.rerun()
-                        
-                elif btn_apagar_aero:
-                    st.session_state.df_aeroportos = st.session_state.df_aeroportos.drop(idx_real_aero).reset_index(drop=True)
-                    save_aeroportos(st.session_state.df_aeroportos)
-                    st.warning("🗑️ Aeroporto eliminado permanentemente da Base de Dados.")
+                    st.error("Preencha ambos os campos.", icon=":material/warning:")
+    with c_ae3:
+        with st.container(border=True, height=ALTURA_AERO):
+            st.markdown(":material/delete: **Remover**")
+            aero_remover = st.selectbox("IATA a remover", ["--- Selecione ---"] + df_aero['IATA'].tolist(), key="sel_remover_aero")
+            if st.button("Remover Aeroporto", type="secondary", icon=":material/delete:"):
+                if aero_remover != "--- Selecione ---":
+                    remover_aeroporto(aero_remover)
+                    st.success(f"Aeroporto {aero_remover} removido.")
                     st.rerun()
 
 # ==========================================
@@ -400,13 +279,13 @@ with aba3:
         novo_email = c1.text_input("E-mail do Operador")
         senha_provisoria = c2.text_input("Senha Provisória (Ex: mudar123)")
         
-        if st.form_submit_button("Autorizar Acesso", type="primary"):
+        if st.form_submit_button("Autorizar Acesso", type="primary", icon=":material/check_circle:"):
             if novo_email and senha_provisoria:
                 if adicionar_usuario(novo_email, senha_provisoria):
-                    st.success(f"✅ O utilizador {novo_email} foi autorizado!")
+                    st.success(f"O utilizador {novo_email} foi autorizado!", icon=":material/check_circle:")
                     st.rerun()
                 else:
-                    st.error("⚠️ Este e-mail já existe na base de dados.")
+                    st.error("Este e-mail já existe na base de dados.", icon=":material/warning:")
             else:
                 st.error("Preencha ambos os campos.")
                 
@@ -414,13 +293,13 @@ with aba3:
     st.subheader("Utilizadores no Sistema")
     
     df_users = get_usuarios()
-    df_users['Status'] = df_users['precisa_trocar_senha'].apply(lambda x: "⏳ Pendente (Troca de senha obrigatória)" if x else "✅ Ativo")
+    df_users['Status'] = df_users['precisa_trocar_senha'].apply(lambda x: "Pendente (Troca de senha obrigatória)" if x else "Ativo")
     
     st.dataframe(df_users[['email', 'Status']], use_container_width=True, hide_index=True)
     
     st.markdown("### Remover Acesso")
     email_remover = st.selectbox("Selecione o e-mail para revogar o acesso:", ["--- Selecione ---"] + df_users['email'].tolist())
-    if st.button("🚫 Revogar Acesso", type="primary"):
+    if st.button("Revogar Acesso", type="primary", icon=":material/block:"):
         if email_remover != "--- Selecione ---":
             if email_remover == st.session_state['email_usuario']:
                 st.error("Não pode remover o seu próprio acesso enquanto está logado!")
@@ -435,110 +314,97 @@ with aba3:
 with aba4:
     st.info("Estes parâmetros afetam diretamente a geração dos ficheiros RPL. Alterações entram em vigor na próxima geração.")
 
-    # --- 4.A TEXTOS PADRÃO ---
-    st.subheader("📝 Textos Padrão")
-    st.caption("Usados quando um voo não corresponde a nenhuma rota cadastrada.")
-
-    cfg = get_config_textos()
-    with st.form("form_textos_padrao"):
-        t_rmk1 = st.text_input("RMK 1 Padrão", value=cfg.get('DEFAULT_RMK_1', ''))
-        t_rmk2 = st.text_input("RMK 2 Padrão", value=cfg.get('DEFAULT_RMK_2', ''))
-        t_rota = st.text_input("Rota Padrão", value=cfg.get('DEFAULT_ROUTE', ''))
-
-        if st.form_submit_button("💾 Salvar Textos Padrão", type="primary"):
-            salvar_config_texto('DEFAULT_RMK_1', t_rmk1.strip())
-            salvar_config_texto('DEFAULT_RMK_2', t_rmk2.strip())
-            salvar_config_texto('DEFAULT_ROUTE', t_rota.strip())
-            st.success("✅ Textos padrão atualizados!")
-            st.rerun()
-
-    st.divider()
-
     # --- 4.B MAPEAMENTO DE EQUIPAMENTOS ---
-    st.subheader("✈️ Mapeamento de Equipamentos")
+    st.subheader(":material/flight: Mapeamento de Equipamentos")
     st.caption("Converte o código de equipamento do ficheiro de voos (ex: 73G) no tipo usado no RPL (ex: B737/M).")
 
     df_equip = get_equipamentos()
-    st.dataframe(df_equip, use_container_width=True, hide_index=True)
-
-    c_eq1, c_eq2 = st.columns(2)
+    ALTURA_EQUIP = 280
+    c_eq1, c_eq2, c_eq3 = st.columns([2, 1, 1])
     with c_eq1:
-        with st.form("form_add_equip", clear_on_submit=True):
-            st.markdown("**➕ Adicionar / Atualizar**")
+        st.dataframe(df_equip, use_container_width=True, hide_index=True, height=ALTURA_EQUIP)
+    with c_eq2:
+        with st.form("form_add_equip", clear_on_submit=True, height=ALTURA_EQUIP):
+            st.markdown(":material/add: **Adicionar**")
             eq_codigo = st.text_input("Código (ex: 73G)", max_chars=10)
             eq_tipo = st.text_input("Tipo RPL (ex: B737/M)", max_chars=15)
-            if st.form_submit_button("Guardar", type="primary"):
+            if st.form_submit_button("Guardar", type="primary", icon=":material/check_circle:"):
                 if eq_codigo and eq_tipo:
                     adicionar_equipamento(eq_codigo, eq_tipo)
-                    st.success(f"✅ {eq_codigo.upper()} → {eq_tipo.upper()} guardado!")
+                    st.success(f"{eq_codigo.upper()} → {eq_tipo.upper()} guardado!", icon=":material/check_circle:")
                     st.rerun()
                 else:
-                    st.error("Preencha ambos os campos.")
-    with c_eq2:
-        st.markdown("**🗑️ Remover**")
-        eq_remover = st.selectbox("Código a remover", ["--- Selecione ---"] + df_equip['CODIGO'].tolist(), key="sel_remover_equip")
-        if st.button("Remover Equipamento", type="secondary"):
-            if eq_remover != "--- Selecione ---":
-                remover_equipamento(eq_remover)
-                st.success(f"Equipamento {eq_remover} removido.")
-                st.rerun()
+                    st.error("Preencha ambos os campos.", icon=":material/warning:")
+    with c_eq3:
+        with st.container(border=True, height=ALTURA_EQUIP):
+            st.markdown(":material/delete: **Remover**")
+            eq_remover = st.selectbox("Código a remover", ["--- Selecione ---"] + df_equip['CODIGO'].tolist(), key="sel_remover_equip")
+            if st.button("Remover Equipamento", type="secondary", icon=":material/delete:"):
+                if eq_remover != "--- Selecione ---":
+                    remover_equipamento(eq_remover)
+                    st.success(f"Equipamento {eq_remover} removido.")
+                    st.rerun()
 
     st.divider()
 
     # --- 4.C PREFIXOS BRASIL ---
-    st.subheader("🇧🇷 Prefixos ICAO Considerados Brasil")
+    st.subheader(":material/flag: Prefixos ICAO Considerados Brasil")
     st.caption("Só são gerados voos cujo aeródromo de origem e destino comecem com um destes prefixos.")
 
     df_prefixos = get_prefixos_br()
-    st.dataframe(df_prefixos, use_container_width=True, hide_index=True)
-
-    c_pf1, c_pf2 = st.columns(2)
+    ALTURA_PREFIXO = 220
+    c_pf1, c_pf2, c_pf3 = st.columns([2, 1, 1])
     with c_pf1:
-        with st.form("form_add_prefixo", clear_on_submit=True):
-            st.markdown("**➕ Adicionar**")
+        st.dataframe(df_prefixos, use_container_width=True, hide_index=True, height=ALTURA_PREFIXO)
+    with c_pf2:
+        with st.form("form_add_prefixo", clear_on_submit=True, height=ALTURA_PREFIXO):
+            st.markdown(":material/add: **Adicionar**")
             novo_prefixo = st.text_input("Prefixo (2 letras, ex: SB)", max_chars=2)
-            if st.form_submit_button("Guardar", type="primary"):
+            if st.form_submit_button("Guardar", type="primary", icon=":material/check_circle:"):
                 if novo_prefixo:
                     adicionar_prefixo_br(novo_prefixo)
-                    st.success(f"✅ Prefixo {novo_prefixo.upper()} adicionado!")
+                    st.success(f"Prefixo {novo_prefixo.upper()} adicionado!", icon=":material/check_circle:")
                     st.rerun()
                 else:
-                    st.error("Preencha o prefixo.")
-    with c_pf2:
-        st.markdown("**🗑️ Remover**")
-        prefixo_remover = st.selectbox("Prefixo a remover", ["--- Selecione ---"] + df_prefixos['PREFIXO'].tolist(), key="sel_remover_prefixo")
-        if st.button("Remover Prefixo", type="secondary"):
-            if prefixo_remover != "--- Selecione ---":
-                remover_prefixo_br(prefixo_remover)
-                st.success(f"Prefixo {prefixo_remover} removido.")
-                st.rerun()
+                    st.error("Preencha o prefixo.", icon=":material/warning:")
+    with c_pf3:
+        with st.container(border=True, height=ALTURA_PREFIXO):
+            st.markdown(":material/delete: **Remover**")
+            prefixo_remover = st.selectbox("Prefixo a remover", ["--- Selecione ---"] + df_prefixos['PREFIXO'].tolist(), key="sel_remover_prefixo")
+            if st.button("Remover Prefixo", type="secondary", icon=":material/delete:"):
+                if prefixo_remover != "--- Selecione ---":
+                    remover_prefixo_br(prefixo_remover)
+                    st.success(f"Prefixo {prefixo_remover} removido.")
+                    st.rerun()
 
     st.divider()
 
     # --- 4.D AERÓDROMOS EXCLUÍDOS ---
-    st.subheader("🚫 Aeródromos Excluídos")
+    st.subheader(":material/block: Aeródromos Excluídos")
     st.caption("Voos com origem ou destino nestes aeródromos nunca são incluídos no RPL, mesmo que atendam aos prefixos acima.")
 
     df_excluidos = get_aerodromos_excluidos()
-    st.dataframe(df_excluidos, use_container_width=True, hide_index=True)
-
-    c_ex1, c_ex2 = st.columns(2)
+    ALTURA_EXCLUIDO = 220
+    c_ex1, c_ex2, c_ex3 = st.columns([2, 1, 1])
     with c_ex1:
-        with st.form("form_add_excluido", clear_on_submit=True):
-            st.markdown("**➕ Adicionar**")
+        st.dataframe(df_excluidos, use_container_width=True, hide_index=True, height=ALTURA_EXCLUIDO)
+    with c_ex2:
+        with st.form("form_add_excluido", clear_on_submit=True, height=ALTURA_EXCLUIDO):
+            st.markdown(":material/add: **Adicionar**")
             novo_excluido = st.text_input("Código ICAO (ex: SBJP)", max_chars=4)
-            if st.form_submit_button("Guardar", type="primary"):
+            if st.form_submit_button("Guardar", type="primary", icon=":material/check_circle:"):
                 if novo_excluido:
                     adicionar_aerodromo_excluido(novo_excluido)
-                    st.success(f"✅ Aeródromo {novo_excluido.upper()} excluído do RPL!")
+                    st.success(f"Aeródromo {novo_excluido.upper()} excluído do RPL!", icon=":material/check_circle:")
                     st.rerun()
                 else:
-                    st.error("Preencha o código ICAO.")
-    with c_ex2:
-        st.markdown("**🗑️ Remover da exclusão**")
-        excluido_remover = st.selectbox("Código a remover", ["--- Selecione ---"] + df_excluidos['ICAO'].tolist(), key="sel_remover_excluido")
-        if st.button("Remover da Lista", type="secondary"):
-            if excluido_remover != "--- Selecione ---":
-                remover_aerodromo_excluido(excluido_remover)
-                st.success(f"Aeródromo {excluido_remover} voltará a ser incluído no RPL.")
-                st.rerun()
+                    st.error("Preencha o código ICAO.", icon=":material/warning:")
+    with c_ex3:
+        with st.container(border=True, height=ALTURA_EXCLUIDO):
+            st.markdown(":material/delete: **Remover da exclusão**")
+            excluido_remover = st.selectbox("Código a remover", ["--- Selecione ---"] + df_excluidos['ICAO'].tolist(), key="sel_remover_excluido")
+            if st.button("Remover da Lista", type="secondary", icon=":material/delete:"):
+                if excluido_remover != "--- Selecione ---":
+                    remover_aerodromo_excluido(excluido_remover)
+                    st.success(f"Aeródromo {excluido_remover} voltará a ser incluído no RPL.")
+                    st.rerun()

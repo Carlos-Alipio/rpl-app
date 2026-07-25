@@ -44,7 +44,7 @@ if not st.session_state['autenticado']:
     # Esconde o menu lateral obrigatoriamente
     st.markdown("<style>[data-testid='stSidebar'] {display: none;}</style>", unsafe_allow_html=True)
     
-    st.title("🔒 Login Sistema RPL")
+    st.title(":material/lock: Login Sistema RPL")
     st.markdown("Insira o seu e-mail corporativo pré-autorizado para aceder à plataforma.")
     
     # Caixa centralizada para o formulário de login
@@ -66,7 +66,7 @@ if not st.session_state['autenticado']:
                         st.session_state['email_usuario'] = email.lower().strip()
                         st.rerun()
                     else:
-                        st.error("❌ E-mail ou palavra-passe incorretos.")
+                        st.error("E-mail ou palavra-passe incorretos.", icon=":material/error:")
 
 # ==========================================
 # USUÁRIO LOGADO
@@ -77,7 +77,7 @@ else:
         # Mantém o menu escondido
         st.markdown("<style>[data-testid='stSidebar'] {display: none;}</style>", unsafe_allow_html=True)
         
-        st.warning("⚠️ **Primeiro Acesso:** Por motivos de segurança corporativa, é obrigatório alterar a sua palavra-passe provisória.")
+        st.warning("**Primeiro Acesso:** Por motivos de segurança corporativa, é obrigatório alterar a sua palavra-passe provisória.", icon=":material/warning:")
         
         c1, c2, c3 = st.columns([1, 2, 1])
         with c2:
@@ -94,14 +94,14 @@ else:
                     else:
                         atualizar_senha(st.session_state['email_usuario'], nova_senha)
                         st.session_state['precisa_trocar_senha'] = False
-                        st.success("✅ Senha atualizada com sucesso! A redirecionar...")
+                        st.success("Senha atualizada com sucesso! A redirecionar...", icon=":material/check_circle:")
                         time.sleep(1.5)
                         st.rerun()
                     
     # --- FASE B: SISTEMA PRINCIPAL COM MENU LATERAL ---
     else:
         # 1. Informação do utilizador no topo do menu lateral
-        st.sidebar.markdown(f"👤 **{st.session_state['email_usuario']}**")
+        st.sidebar.markdown(f":material/person: **{st.session_state['email_usuario']}**")
         
         # 2. Definição das Páginas (Mapeia para os ficheiros da pasta pages/)
         pg_rpl = st.Page("pages/1_✈️_Gerador_RPL.py", title="Gerador RPL", icon=":material/flight_takeoff:", default=True)
