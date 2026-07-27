@@ -162,17 +162,23 @@ def gerar_ficheiros_rpl(caminho_csv_voos, data_inicio_str, data_fim_str):
     rpl_lines, csv_records, cur_page, flt_page, LIMIT = [], [], 1, 0, 60
     rpl_lines.extend(gerar_cabecalho(d_ini, cur_page))
 
+    rotas_sem_cadastro = set()
+
     def resolve(dep, arr, eobt):
         fallback = {
             'route': rota_padrao, 'tv': "0000", 'obs1': rmk1, 'obs2': rmk2,
             'mach': 'N0000', 'fl': '000', 'rota_pura': rota_padrao
         }
         res = routes_map.get((dep, arr))
-        if not res: return fallback
+        if not res:
+            rotas_sem_cadastro.add((dep, arr))
+            return fallback
         t_val = parse_time_to_int(eobt)
         for tr in res['timed']:
             s, e = tr['start'], tr['end']
             if (s <= e and s <= t_val <= e) or (s > e and (t_val >= s or t_val <= e)): return tr
+        if res['default'] is None:
+            rotas_sem_cadastro.add((dep, arr))
         return res['default'] or fallback
 
     for _, group in df.groupby('Block_ID'):
@@ -212,4 +218,14 @@ def gerar_ficheiros_rpl(caminho_csv_voos, data_inicio_str, data_fim_str):
     txt_out, csv_out = "RPL_Final.txt", "RPL_Dados_Consolidados.csv"
     with open(txt_out, 'w', encoding='utf-8') as f: f.write('\n'.join(rpl_lines) + '\n')
     pd.DataFrame(csv_records).to_csv(csv_out, index=False, header=False, sep=';')
+
+    if rotas_sem_cadastro:
+        pares = ", ".join(f"{dep} → {arr}" for dep, arr in sorted(rotas_sem_cadastro))
+        st.warning(
+            f"Rota padrão (valores de reserva) utilizada por falta de cadastro em "
+            f"'Visualizar e Selecionar Malha' para: {pares}. Cadastre estas rotas para "
+            f"evitar o uso de dados genéricos no RPL.",
+            icon=":material/warning:"
+        )
+
     return txt_out, csv_out
