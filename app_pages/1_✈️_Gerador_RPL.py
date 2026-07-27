@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import os
+from datetime import date, timedelta
 from core import gerar_ficheiros_rpl
 
 st.set_page_config(page_title="Gerador RPL", page_icon=":material/print:")
@@ -28,11 +29,19 @@ st.divider()
 
 # 2. Escolha de Datas
 st.subheader("Período de Validade")
+
+def _atualizar_data_fim():
+    st.session_state['data_fim'] = st.session_state['data_inicio'] + timedelta(days=6)
+
+# Valor inicial (antes de qualquer interação): fim = hoje + 6 dias (período de 7 dias)
+if 'data_fim' not in st.session_state:
+    st.session_state['data_fim'] = date.today() + timedelta(days=6)
+
 col1, col2 = st.columns(2)
 with col1:
-    data_inicio = st.date_input("Data de Início", format="DD/MM/YYYY")
+    data_inicio = st.date_input("Data de Início", format="DD/MM/YYYY", key="data_inicio", on_change=_atualizar_data_fim)
 with col2:
-    data_fim = st.date_input("Data de Fim", format="DD/MM/YYYY")
+    data_fim = st.date_input("Data de Fim", format="DD/MM/YYYY", key="data_fim")
 
 st.divider()
 

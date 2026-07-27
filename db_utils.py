@@ -37,13 +37,18 @@ def get_aeroportos() -> pd.DataFrame:
     except exc.SQLAlchemyError:
         return pd.DataFrame()
 
+COLUNAS_ROTAS = ['DE', 'PARA', 'MACH', 'FL', 'ROTA', 'EET', 'TV', 'HORA INICIO', 'HORA FIM']
+
 def save_rotas(df: pd.DataFrame):
     if conn is None: return
     try:
+        df = df.reindex(columns=COLUNAS_ROTAS)
         with conn.session as s:
             s.execute(text("TRUNCATE TABLE rotas"))
+            # Insere na mesma transação do TRUNCATE: se a inserção falhar, o TRUNCATE
+            # também é revertido e a tabela não fica vazia por engano.
+            df.to_sql('rotas', con=s.connection(), if_exists='append', index=False, method='multi', chunksize=1000)
             s.commit()
-        df.to_sql('rotas', con=conn.engine, if_exists='append', index=False, method='multi', chunksize=1000)
         st.success("Rotas atualizadas com sucesso!")
     except Exception as e:
         st.error(f"Falha ao salvar rotas: {e}")

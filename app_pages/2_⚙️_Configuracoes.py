@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from db_utils import (
-    get_rotas, save_rotas, adicionar_usuario, get_usuarios, remover_usuario,
+    get_rotas, save_rotas, COLUNAS_ROTAS, adicionar_usuario, get_usuarios, remover_usuario,
     get_aeroportos, adicionar_aeroporto, remover_aeroporto,
     get_equipamentos, adicionar_equipamento, remover_equipamento,
     get_prefixos_br, adicionar_prefixo_br, remover_prefixo_br,
@@ -52,9 +52,8 @@ if 'df_rotas' not in st.session_state:
 st.header(":material/settings: Painel de Configurações")
 st.markdown("Gestão avançada da base de dados. Use os filtros para visualizar a malha e **clique diretamente numa linha da tabela** para a editar.")
 
-aba1, aba2, aba3, aba4 = st.tabs([
+aba1, aba2, aba3 = st.tabs([
     ":material/route: Gestão de Rotas",
-    ":material/local_airport: Códigos de Aeroportos",
     ":material/manage_accounts: Utilizadores",
     ":material/build: Sistema",
 ])
@@ -117,12 +116,22 @@ with aba1:
                 if 'DE' not in df_import.columns or 'PARA' not in df_import.columns or 'ROTA' not in df_import.columns:
                     st.error("O ficheiro não tem as colunas obrigatórias 'DE', 'PARA' e 'ROTA'. Verifique os cabeçalhos.", icon=":material/warning:")
                 else:
+                    colunas_desconhecidas = [c for c in df_import.columns if c not in COLUNAS_ROTAS]
+                    if colunas_desconhecidas:
+                        st.warning(
+                            f"Estas colunas do ficheiro não são reconhecidas e **serão ignoradas**: {', '.join(colunas_desconhecidas)}. "
+                            "Verifique se não há erro de digitação ou acentuação no cabeçalho (ex: 'HORA INICIO' sem acento).",
+                            icon=":material/warning:"
+                        )
                     st.success(f"Ficheiro lido com sucesso! ({len(df_import)} linhas encontradas).")
                     if st.button("Processar e Adicionar à Base de Dados", type="primary", icon=":material/rocket_launch:"):
+                        # Descarta colunas não reconhecidas para manter a tabela consistente com o que é gravado
+                        df_import = df_import[[c for c in df_import.columns if c in COLUNAS_ROTAS]]
+
                         # Limpeza profunda
                         for col in df_import.columns:
                             df_import[col] = df_import[col].apply(lambda x: str(x).upper().strip() if pd.notnull(x) else "")
-                        
+
                         st.session_state.df_rotas = pd.concat([st.session_state.df_rotas, df_import], ignore_index=True)
                         
                         # Remove duplicados exatos
@@ -137,7 +146,7 @@ with aba1:
     st.divider()
 
     # --- 2. FILTROS E VISUALIZAÇÃO INTERATIVA ---
-    st.subheader("2. Visualizar e Selecionar Malha")
+    st.subheader(":material/table_view: Visualizar e Selecionar Malha")
     c_f1, c_f2, c_f3 = st.columns(3)
     
     opcoes_de = sorted(st.session_state.df_rotas['DE'].dropna().astype(str).unique())
@@ -173,7 +182,7 @@ with aba1:
         st.divider()
 
         # --- 3. EDITOR DA ROTA SELECIONADA ---
-        st.subheader("3. Gerir Rota Selecionada")
+        st.subheader(":material/edit_road: Gerir Rota Selecionada")
         
         linhas_clicadas = evento_selecao.get("selection", {}).get("rows", [])
         
@@ -234,9 +243,51 @@ with aba1:
                     st.rerun()
 
 # ==========================================
-# ABA 2: AEROPORTOS
+# ABA 2: SEGURANÇA E UTILIZADORES
 # ==========================================
 with aba2:
+    st.subheader(":material/person_add: Pré-Autorizar Novos Utilizadores")
+    st.info("Insira o e-mail do operador e defina uma senha provisória. No seu primeiro acesso, ele será obrigado a criar uma senha pessoal.")
+    
+    with st.form("form_novo_user", clear_on_submit=True):
+        c1, c2 = st.columns(2)
+        novo_email = c1.text_input("E-mail do Operador")
+        senha_provisoria = c2.text_input("Senha Provisória (Ex: mudar123)")
+        
+        if st.form_submit_button("Autorizar Acesso", type="primary", icon=":material/check_circle:"):
+            if novo_email and senha_provisoria:
+                if adicionar_usuario(novo_email, senha_provisoria):
+                    st.success(f"O utilizador {novo_email} foi autorizado!", icon=":material/check_circle:")
+                    st.rerun()
+                else:
+                    st.error("Este e-mail já existe na base de dados.", icon=":material/warning:")
+            else:
+                st.error("Preencha ambos os campos.")
+                
+    st.divider()
+    st.subheader(":material/group: Utilizadores no Sistema")
+
+    df_users = get_usuarios()
+    df_users['Status'] = df_users['precisa_trocar_senha'].apply(lambda x: "Pendente (Troca de senha obrigatória)" if x else "Ativo")
+
+    st.dataframe(df_users[['email', 'Status']], use_container_width=True, hide_index=True)
+
+    st.markdown("### :material/person_remove: Remover Acesso")
+    email_remover = st.selectbox("Selecione o e-mail para revogar o acesso:", ["--- Selecione ---"] + df_users['email'].tolist())
+    if st.button("Revogar Acesso", type="primary", icon=":material/block:"):
+        if email_remover != "--- Selecione ---":
+            if email_remover == st.session_state['email_usuario']:
+                st.error("Não pode remover o seu próprio acesso enquanto está logado!")
+            else:
+                remover_usuario(email_remover)
+                st.success(f"Acesso de {email_remover} revogado.")
+                st.rerun()
+
+# ==========================================
+# ABA 3: SISTEMA (PARÂMETROS DO GERADOR DE RPL)
+# ==========================================
+with aba3:
+    # --- 4.A CÓDIGOS DE AEROPORTOS ---
     st.subheader(":material/local_airport: Códigos de Aeroportos")
     st.caption("Converte o código IATA do ficheiro de voos (ex: CGH) no código ICAO usado no RPL (ex: SBSP).")
 
@@ -267,52 +318,7 @@ with aba2:
                     st.success(f"Aeroporto {aero_remover} removido.")
                     st.rerun()
 
-# ==========================================
-# ABA 3: SEGURANÇA E UTILIZADORES
-# ==========================================
-with aba3:
-    st.subheader("Pré-Autorizar Novos Utilizadores")
-    st.info("Insira o e-mail do operador e defina uma senha provisória. No seu primeiro acesso, ele será obrigado a criar uma senha pessoal.")
-    
-    with st.form("form_novo_user", clear_on_submit=True):
-        c1, c2 = st.columns(2)
-        novo_email = c1.text_input("E-mail do Operador")
-        senha_provisoria = c2.text_input("Senha Provisória (Ex: mudar123)")
-        
-        if st.form_submit_button("Autorizar Acesso", type="primary", icon=":material/check_circle:"):
-            if novo_email and senha_provisoria:
-                if adicionar_usuario(novo_email, senha_provisoria):
-                    st.success(f"O utilizador {novo_email} foi autorizado!", icon=":material/check_circle:")
-                    st.rerun()
-                else:
-                    st.error("Este e-mail já existe na base de dados.", icon=":material/warning:")
-            else:
-                st.error("Preencha ambos os campos.")
-                
     st.divider()
-    st.subheader("Utilizadores no Sistema")
-    
-    df_users = get_usuarios()
-    df_users['Status'] = df_users['precisa_trocar_senha'].apply(lambda x: "Pendente (Troca de senha obrigatória)" if x else "Ativo")
-    
-    st.dataframe(df_users[['email', 'Status']], use_container_width=True, hide_index=True)
-    
-    st.markdown("### Remover Acesso")
-    email_remover = st.selectbox("Selecione o e-mail para revogar o acesso:", ["--- Selecione ---"] + df_users['email'].tolist())
-    if st.button("Revogar Acesso", type="primary", icon=":material/block:"):
-        if email_remover != "--- Selecione ---":
-            if email_remover == st.session_state['email_usuario']:
-                st.error("Não pode remover o seu próprio acesso enquanto está logado!")
-            else:
-                remover_usuario(email_remover)
-                st.success(f"Acesso de {email_remover} revogado.")
-                st.rerun()
-
-# ==========================================
-# ABA 4: SISTEMA (PARÂMETROS DO GERADOR DE RPL)
-# ==========================================
-with aba4:
-    st.info("Estes parâmetros afetam diretamente a geração dos ficheiros RPL. Alterações entram em vigor na próxima geração.")
 
     # --- 4.B MAPEAMENTO DE EQUIPAMENTOS ---
     st.subheader(":material/flight: Mapeamento de Equipamentos")

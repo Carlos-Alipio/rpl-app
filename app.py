@@ -1,5 +1,6 @@
 import streamlit as st
 import time
+import base64
 from db_utils import verificar_login, atualizar_senha, init_db
 
 # Garante que a base de dados acorda e se auto-repara mal a nuvem liga!
@@ -15,18 +16,93 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Coloca a marca no topo do menu lateral (acima da navegação)
-st.logo("assets/logo-voegol-new.svg")
+with open("assets/logo-voegol-new.svg", "rb") as _f:
+    _logo_b64 = base64.b64encode(_f.read()).decode()
 
 # Estilização CSS injetada diretamente (Layout Premium)
 st.markdown("""
     <style>
-    /* Oculta o cabeçalho padrão do Streamlit para um visual mais limpo */
-    header {visibility: hidden;}
-    
-    /* Botões primários mais elegantes */
-    .stButton > button[data-baseweb="button"] {
+    /* Oculta o cabeçalho padrão do Streamlit (substituído pela faixa laranja) */
+    header[data-testid="stHeader"] {display: none;}
+
+    /* Faixa laranja fixa no topo, acima do menu lateral e do conteúdo */
+    .topbar-gol {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 3.5rem;
+        background-color: #FF7020;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 1.5rem;
+        z-index: 999999;
+    }
+    .topbar-gol .topbar-brand {
+        display: flex;
+        align-items: center;
+        gap: 1.25rem;
+    }
+    .topbar-gol .topbar-brand img {
+        height: 20px;
+        /* Converte a marca para branco sobre o fundo laranja */
+        filter: brightness(0) invert(1);
+    }
+    .topbar-gol .topbar-brand span {
+        color: #fff;
+        font-weight: 700;
+        font-size: 1rem;
+        letter-spacing: 0.02em;
+    }
+    .topbar-gol .topbar-user {
+        color: #fff;
+        font-size: 0.875rem;
+    }
+
+    /* Empurra o menu lateral e o conteúdo principal para baixo da faixa */
+    div[data-testid="stAppViewContainer"] {
+        padding-top: 3.5rem;
+    }
+
+    /* Menu lateral sempre visível: esconde os controlos de recolher/expandir */
+    [data-testid="stSidebarCollapseButton"] {display: none;}
+    [data-testid="stExpandSidebarButton"] {display: none;}
+
+    /* Letra um pouco maior no menu lateral */
+    [data-testid="stSidebarNavLink"] span[label] {
+        font-size: 1rem;
+    }
+    [data-testid="stNavSectionHeader"] {
+        font-size: 0.9rem;
+    }
+
+    /* Botões mais elegantes, na mesma cor laranja da faixa superior */
+    button[data-baseweb="button"] {
         border-radius: 8px;
+    }
+    button[data-testid^="stBaseButton-primary"] {
+        background-color: #FF7020;
+        border-color: #FF7020;
+        color: #fff;
+    }
+    button[data-testid^="stBaseButton-primary"]:hover,
+    button[data-testid^="stBaseButton-primary"]:active,
+    button[data-testid^="stBaseButton-primary"]:focus:not(:active) {
+        background-color: #e0611c;
+        border-color: #e0611c;
+        color: #fff;
+    }
+    button[data-testid^="stBaseButton-secondary"] {
+        border-color: #FF7020;
+        color: #FF7020;
+    }
+    button[data-testid^="stBaseButton-secondary"]:hover,
+    button[data-testid^="stBaseButton-secondary"]:active,
+    button[data-testid^="stBaseButton-secondary"]:focus:not(:active) {
+        border-color: #FF7020;
+        color: #FF7020;
+        background-color: rgba(255, 112, 32, 0.08);
     }
     </style>
 """, unsafe_allow_html=True)
@@ -36,6 +112,20 @@ if 'autenticado' not in st.session_state:
     st.session_state['autenticado'] = False
     st.session_state['precisa_trocar_senha'] = False
     st.session_state['email_usuario'] = ""
+
+# ==========================================
+# FAIXA LARANJA (TOPO, SEMPRE VISÍVEL)
+# ==========================================
+_email_logado = st.session_state['email_usuario'] if st.session_state['autenticado'] else ""
+st.markdown(f"""
+    <div class="topbar-gol">
+        <div class="topbar-brand">
+            <img src="data:image/svg+xml;base64,{_logo_b64}" alt="GOL">
+            <span>Sistema RPL</span>
+        </div>
+        <div class="topbar-user">{_email_logado}</div>
+    </div>
+""", unsafe_allow_html=True)
 
 # ==========================================
 # TELA DE LOGIN (SEM MENU LATERAL)
@@ -100,21 +190,20 @@ else:
                     
     # --- FASE B: SISTEMA PRINCIPAL COM MENU LATERAL ---
     else:
-        # 1. Informação do utilizador no topo do menu lateral
-        st.sidebar.markdown(f":material/person: **{st.session_state['email_usuario']}**")
-        
-        # 2. Definição das Páginas (Mapeia para os ficheiros da pasta pages/)
-        pg_rpl = st.Page("pages/1_✈️_Gerador_RPL.py", title="Gerador RPL", icon=":material/flight_takeoff:", default=True)
-        pg_config = st.Page("pages/2_⚙️_Configuracoes.py", title="Configurações", icon=":material/settings:")
+        # 1. Definição das Páginas (Mapeia para os ficheiros da pasta pages/)
+        pg_rpl = st.Page("app_pages/1_✈️_Gerador_RPL.py", title="Gerador RPL", icon=":material/flight_takeoff:", default=True)
+        pg_config = st.Page("app_pages/2_⚙️_Configuracoes.py", title="Configurações", icon=":material/settings:")
 
-        # 3. Construção da Navegação Simples (Remove o espaço extra)
-        pg = st.navigation([pg_rpl, pg_config])
+        # 2. Construção da Navegação Sectorizada (Operacional / Ajustes)
+        pg = st.navigation({
+            "Operacional": [pg_rpl],
+            "Ajustes": [pg_config],
+        })
 
-        # 4. Roda a página selecionada
+        # 3. Roda a página selecionada
         pg.run()
-        
-        # 5. Botão de Logout no fundo do Sidebar
-        st.sidebar.divider()
+
+        # 4. Botão de Logout no fundo do Sidebar
         if st.sidebar.button("Sair do Sistema", icon=":material/logout:", use_container_width=True):
             st.session_state['autenticado'] = False
             st.session_state['email_usuario'] = ""
