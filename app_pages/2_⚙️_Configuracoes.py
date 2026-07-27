@@ -100,7 +100,7 @@ with aba1:
 
     # --- 1.B IMPORTAÇÃO EM LOTE ---
     with st.expander("Importar Lote via Excel/CSV", icon=":material/folder_open:", expanded=False):
-        st.info("O ficheiro deve conter na primeira linha (cabeçalho) as colunas: **DE, PARA, ROTA**. Pode incluir opcionalmente: MACH, FL, TV, HORA INICIO, HORA FIM, EET.")
+        st.info("O arquivo deve conter na primeira linha (cabeçalho) as colunas: **DE, PARA, ROTA**. Pode incluir opcionalmente: MACH, FL, TV, HORA INICIO, HORA FIM, EET.")
         ficheiro_rotas = st.file_uploader("Arraste a planilha de Rotas", type=["xlsx", "xls", "csv"], key="upload_rotas")
         
         if ficheiro_rotas:
@@ -114,16 +114,16 @@ with aba1:
                 df_import.columns = df_import.columns.str.upper().str.strip()
                 
                 if 'DE' not in df_import.columns or 'PARA' not in df_import.columns or 'ROTA' not in df_import.columns:
-                    st.error("O ficheiro não tem as colunas obrigatórias 'DE', 'PARA' e 'ROTA'. Verifique os cabeçalhos.", icon=":material/warning:")
+                    st.error("O arquivo não tem as colunas obrigatórias 'DE', 'PARA' e 'ROTA'. Verifique os cabeçalhos.", icon=":material/warning:")
                 else:
                     colunas_desconhecidas = [c for c in df_import.columns if c not in COLUNAS_ROTAS]
                     if colunas_desconhecidas:
                         st.warning(
-                            f"Estas colunas do ficheiro não são reconhecidas e **serão ignoradas**: {', '.join(colunas_desconhecidas)}. "
+                            f"Estas colunas do arquivo não são reconhecidas e **serão ignoradas**: {', '.join(colunas_desconhecidas)}. "
                             "Verifique se não há erro de digitação ou acentuação no cabeçalho (ex: 'HORA INICIO' sem acento).",
                             icon=":material/warning:"
                         )
-                    st.success(f"Ficheiro lido com sucesso! ({len(df_import)} linhas encontradas).")
+                    st.success(f"Arquivo lido com sucesso! ({len(df_import)} linhas encontradas).")
                     if st.button("Processar e Adicionar à Base de Dados", type="primary", icon=":material/rocket_launch:"):
                         # Descarta colunas não reconhecidas para manter a tabela consistente com o que é gravado
                         df_import = df_import[[c for c in df_import.columns if c in COLUNAS_ROTAS]]
@@ -141,12 +141,12 @@ with aba1:
                         st.success("Malha importada e consolidada com sucesso!", icon=":material/check_circle:")
                         st.rerun()
             except Exception as e:
-                st.error(f"Erro ao processar ficheiro: {e}")
+                st.error(f"Erro ao processar arquivo: {e}")
 
     st.divider()
 
     # --- 2. FILTROS E VISUALIZAÇÃO INTERATIVA ---
-    st.subheader(":material/table_view: Visualizar e Selecionar Malha")
+    st.subheader(":material/table_view: Cadastro de Rotas")
     c_f1, c_f2, c_f3 = st.columns(3)
     
     opcoes_de = sorted(st.session_state.df_rotas['DE'].dropna().astype(str).unique())
@@ -288,8 +288,8 @@ with aba2:
 # ==========================================
 with aba3:
     # --- 4.A CÓDIGOS DE AEROPORTOS ---
-    st.subheader(":material/local_airport: Códigos de Aeroportos")
-    st.caption("Converte o código IATA do ficheiro de voos (ex: CGH) no código ICAO usado no RPL (ex: SBSP).")
+    st.subheader(":material/local_airport: Conversor IATA/ICAO")
+    st.caption("Converte o código IATA do arquivo de voos (ex: CGH) no código ICAO usado no RPL (ex: SBSP).")
 
     df_aero = get_aeroportos()
     ALTURA_AERO = 280
@@ -322,7 +322,7 @@ with aba3:
 
     # --- 4.B MAPEAMENTO DE EQUIPAMENTOS ---
     st.subheader(":material/flight: Mapeamento de Equipamentos")
-    st.caption("Converte o código de equipamento do ficheiro de voos (ex: 73G) no tipo usado no RPL (ex: B737/M).")
+    st.caption("Converte o código de equipamento do arquivo de voos (ex: 73G) no tipo usado no RPL (ex: B737/M).")
 
     df_equip = get_equipamentos()
     ALTURA_EQUIP = 280
@@ -354,7 +354,7 @@ with aba3:
     st.divider()
 
     # --- 4.C PREFIXOS BRASIL ---
-    st.subheader(":material/flag: Prefixos ICAO Considerados Brasil")
+    st.subheader(":material/flag: Prefixos ICAO Considerados")
     st.caption("Só são gerados voos cujo aeródromo de origem e destino comecem com um destes prefixos.")
 
     df_prefixos = get_prefixos_br()

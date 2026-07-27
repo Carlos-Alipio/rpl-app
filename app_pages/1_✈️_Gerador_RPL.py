@@ -13,7 +13,7 @@ if not st.session_state.get('autenticado', False):
 # ----------------------------
 
 st.header(":material/print: Gerador de RPL")
-st.markdown("Insira o ficheiro mensal de voos e escolha o período de validade para o processamento.")
+st.markdown("Insira o arquivo mensal de voos e escolha o período de validade para o processamento.")
 
 # --- MEMÓRIA DO STREAMLIT (SESSION STATE) ---
 # Inicializamos as variáveis na memória para que ele não se esqueça dos ficheiros
@@ -23,7 +23,7 @@ if 'rpl_processado' not in st.session_state:
     st.session_state['csv_path'] = None
 
 # 1. Área de Upload
-ficheiro_csv = st.file_uploader("Ficheiro da Malha de Voos (CSV)", type=['csv'])
+ficheiro_csv = st.file_uploader("Arquivo da Malha de Voos (CSV)", type=['csv'])
 
 st.divider()
 
@@ -48,7 +48,7 @@ st.divider()
 # 3. Botão de Ação (Apenas gera e guarda na memória)
 if st.button("Processar RPL", type="primary", use_container_width=True, icon=":material/rocket_launch:"):
     if ficheiro_csv is None:
-        st.error("Por favor, faça o upload do ficheiro CSV primeiro.", icon=":material/warning:")
+        st.error("Por favor, faça o upload do arquivo CSV primeiro.", icon=":material/warning:")
     elif data_inicio > data_fim:
         st.error("A data de início não pode ser posterior à data de fim.", icon=":material/warning:")
     else:
@@ -71,7 +71,7 @@ if st.button("Processar RPL", type="primary", use_container_width=True, icon=":m
 # 4. Exibir Botões de Download (Fora do if processar!)
 # Como está fora do bloco do botão, ficará sempre visível enquanto a variável de memória for True
 if st.session_state['rpl_processado']:
-    st.success("Ficheiros gerados com sucesso e perfeitamente formatados para o CGNA!", icon=":material/check_circle:")
+    st.success("Arquivos gerados com sucesso!", icon=":material/check_circle:")
 
     col_btn1, col_btn2 = st.columns(2)
 

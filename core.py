@@ -220,11 +220,10 @@ def gerar_ficheiros_rpl(caminho_csv_voos, data_inicio_str, data_fim_str):
     pd.DataFrame(csv_records).to_csv(csv_out, index=False, header=False, sep=';')
 
     if rotas_sem_cadastro:
-        pares = ", ".join(f"{dep} → {arr}" for dep, arr in sorted(rotas_sem_cadastro))
+        bullets = "\n".join(f"- {dep} → {arr}" for dep, arr in sorted(rotas_sem_cadastro))
         st.warning(
-            f"Rota padrão (valores de reserva) utilizada por falta de cadastro em "
-            f"'Visualizar e Selecionar Malha' para: {pares}. Cadastre estas rotas para "
-            f"evitar o uso de dados genéricos no RPL.",
+            f"Rota padrão utilizada por falta de cadastro em 'Cadastro de Rotas' nos "
+            f"seguintes trechos:\n{bullets}",
             icon=":material/warning:"
         )
 

@@ -135,7 +135,7 @@ if not st.session_state['autenticado']:
     st.markdown("<style>[data-testid='stSidebar'] {display: none;}</style>", unsafe_allow_html=True)
     
     st.title(":material/lock: Login Sistema RPL")
-    st.markdown("Insira o seu e-mail corporativo pré-autorizado para aceder à plataforma.")
+    st.markdown("Insira o seu e-mail corporativo para acessar a plataforma.")
     
     # Caixa centralizada para o formulário de login
     c1, c2, c3 = st.columns([1, 2, 1])
